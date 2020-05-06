@@ -76,11 +76,11 @@ namespace BytexDigital.Steam.Clients.CLI
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed! Error: {ex.Message}");
+                Console.WriteLine($" Failed! Error: {ex.Message}");
                 Environment.Exit(3);
             }
 
-            Console.WriteLine("Success!");
+            Console.WriteLine("OK.");
 
             if (opt.DownloadWorkshopItem)
             {
@@ -94,30 +94,6 @@ namespace BytexDigital.Steam.Clients.CLI
             _steamClient.Shutdown();
         }
 
-        static void Write(string text, ConsoleColor? color = null, ConsoleColor? backgroundColor = null)
-        {
-            Console.ResetColor();
-
-            if (color != null)
-            {
-                Console.ForegroundColor = color.Value;
-            }
-
-            if (backgroundColor != null)
-            {
-                Console.BackgroundColor = backgroundColor.Value;
-            }
-
-            Console.Write(text);
-            Console.ResetColor();
-        }
-
-        static void WriteLine(string text, ConsoleColor? color = null, ConsoleColor? backgroundColor = null)
-        {
-            Write(text, color, backgroundColor);
-            Console.WriteLine();
-        }
-
         static void HandleParsingError(IEnumerable<Error> errors)
         {
             Console.WriteLine("Error parsing arguments");
@@ -126,10 +102,6 @@ namespace BytexDigital.Steam.Clients.CLI
 
         static async Task DownloadWorkshopItem(Options opt)
         {
-            Console.WriteLine();
-            Console.WriteLine("Workshop item download requested");
-            Console.WriteLine();
-
             if (string.IsNullOrEmpty(opt.TargetDirectory))
             {
                 Console.WriteLine("Error: Please specify a target directory.");
@@ -165,21 +137,9 @@ namespace BytexDigital.Steam.Clients.CLI
 
             try
             {
-                Console.WriteLine();
-
                 SteamOs steamOs = new SteamOs(opt.OS);
 
-                Console.WriteLine("Workshop item download settings:");
-                Console.WriteLine($"app id = {opt.AppId.Value}");
-                Console.WriteLine($"workshop item id = {opt.WorkshopFileId.Value}");
-                Console.WriteLine($"manifest id = {(opt.ManifestId.HasValue ? opt.ManifestId.Value.ToString() : "<unspecified>")}");
-                Console.WriteLine($"os = {steamOs.Identifier}");
-                Console.WriteLine($"branch = {opt.Branch}");
-                Console.WriteLine($"branch password = {(!string.IsNullOrEmpty(opt.BranchPassword) ? opt.BranchPassword : "<unspecified>")}");
-                Console.WriteLine($"target dir = {opt.TargetDirectory}");
-                Console.WriteLine();
-
-                Console.Write("Attempting to start download... ");
+                Console.Write($"Attempting to start download of item {opt.WorkshopFileId.Value}... ");
 
                 var downloadHandler = await _steamContentClient.GetPublishedFileDataAsync(
                     opt.WorkshopFileId.Value,
@@ -189,7 +149,8 @@ namespace BytexDigital.Steam.Clients.CLI
 
                 var downloadTask = downloadHandler.DownloadToFolderAsync(opt.TargetDirectory);
 
-                Console.WriteLine("Success!");
+                Console.WriteLine("OK.");
+                Console.WriteLine("Downloading...");
 
                 while (!downloadTask.IsCompleted)
                 {
@@ -203,14 +164,12 @@ namespace BytexDigital.Steam.Clients.CLI
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed! Error: {ex.Message}");
+                Console.WriteLine($"Error: {ex.Message}{(ex.InnerException != null ? $" Inner Exception: {ex.InnerException.Message}" : "")}");
                 Environment.Exit(110);
             }
 
             sw.Stop();
-
-            Console.WriteLine();
-            Console.WriteLine($"Download successful, it took {sw.Elapsed.Minutes}:{sw.Elapsed.Seconds}");
+            Console.WriteLine($"Download completed, it took {sw.Elapsed:hh\\:mm\\:ss}");
         }
     }
 }

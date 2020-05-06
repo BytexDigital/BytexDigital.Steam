@@ -61,9 +61,9 @@ namespace BytexDigital.Steam.ContentDelivery
                 {
                     cdnClientWrapper = await SteamCdnClientPool.GetClient(appId, depotId);
 
-                    await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
+                    //await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
 
-                    var manifest = await cdnClientWrapper.CdnClient.DownloadManifestAsync(depotId, manifestId);
+                    var manifest = await cdnClientWrapper.CdnClient.DownloadManifestAsync(depotId, manifestId, cdnClientWrapper.ServerWrapper.Server);
 
                     if (manifest.FilenamesEncrypted)
                     {

@@ -139,7 +139,7 @@ namespace BytexDigital.Steam.ContentDelivery
                     client.AuthTokens.Add(authToken);
                 }
 
-                await client.CdnClient.AuthenticateDepotAsync(depotId, await GetDepotKeyAsync(depotId, appId), authToken.Token);
+                client.CdnClient.AuthenticateDepot(depotId, await GetDepotKeyAsync(depotId, appId), authToken.Token);
             }
         }
 
@@ -200,7 +200,7 @@ namespace BytexDigital.Steam.ContentDelivery
                     {
                         var cdnClient = new CDNClient(_steamContentClient.SteamClient.InternalClient);
 
-                        await cdnClient.ConnectAsync(serverWrapper.Server);
+                        //await cdnClient.ConnectAsync(serverWrapper.Server);
 
                         var wrapper = new CdnClientWrapper(cdnClient, serverWrapper);
 
