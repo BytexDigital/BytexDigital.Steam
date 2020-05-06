@@ -72,9 +72,9 @@ namespace BytexDigital.Steam.Clients.CLI
             {
                 await _steamClient.ConnectAsync();
             }
-            catch
+            catch (Exception ex)
             {
-                Console.WriteLine("Failed!");
+                Console.WriteLine($"Failed! Error: {ex.Message}");
                 Environment.Exit(3);
             }
 
