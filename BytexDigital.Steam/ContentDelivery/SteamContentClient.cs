@@ -110,6 +110,48 @@ namespace BytexDigital.Steam.ContentDelivery
             throw new SteamPublishedFileDetailsFetchException(result.Result);
         }
 
+        public async Task<IList<PublishedFileDetails>> GetPublishedFilesForAppIdAsync(AppId appId, CancellationToken? cancellationToken = null)
+        {
+            cancellationToken = cancellationToken ?? CancellationToken.None;
+
+            string paginationCursor = null;
+            List<PublishedFileDetails> items = new List<PublishedFileDetails>();
+
+            while (!cancellationToken.Value.IsCancellationRequested)
+            {
+                var methodResponse = await PublishedFileService.SendMessage(api => api.QueryFiles(new CPublishedFile_QueryFiles_Request
+                {
+                    appid = appId,
+                    return_vote_data = true,
+                    return_children = true,
+                    return_for_sale_data = true,
+                    return_kv_tags = true,
+                    return_metadata = true,
+                    return_tags = true,
+                    return_previews = true,
+                    return_details = true,
+                    return_short_description = true,
+                    page = 1,
+                    numperpage = 100,
+                    query_type = 11,
+                    filetype = (uint)EWorkshopFileType.GameManagedItem,
+                    cursor = paginationCursor
+                }));
+
+                var returnedItems = methodResponse.GetDeserializedResponse<CPublishedFile_QueryFiles_Response>();
+
+                items.AddRange(returnedItems.publishedfiledetails);
+                paginationCursor = returnedItems.next_cursor;
+
+                if (paginationCursor == null)
+                {
+                    break;
+                }
+            }
+
+            return items;
+        }
+
 #nullable enable
         public async Task<DownloadTask> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null)
 #nullable disable
