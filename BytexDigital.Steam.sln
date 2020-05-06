@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29613.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BytexDigital.Steam", "BytexDigital.Steam\BytexDigital.Steam.csproj", "{EB4EEDAB-5866-481F-983B-C985A4092EFC}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BytexDigital.Steam.TestClient", "BytexDigital.Steam.TestClient\BytexDigital.Steam.TestClient.csproj", "{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GitHub", "GitHub", "{DA1D79D2-24E9-4FEC-8191-713FC5A1349F}"
+	ProjectSection(SolutionItems) = preProject
+		LICENSE.md = LICENSE.md
+		README.md = README.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EB4EEDAB-5866-481F-983B-C985A4092EFC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB4EEDAB-5866-481F-983B-C985A4092EFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB4EEDAB-5866-481F-983B-C985A4092EFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB4EEDAB-5866-481F-983B-C985A4092EFC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7403A33F-687C-417E-91F7-E6653604B9D6}
+	EndGlobalSection
+EndGlobal
