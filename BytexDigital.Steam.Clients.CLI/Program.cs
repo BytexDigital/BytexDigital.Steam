@@ -7,7 +7,9 @@ using CommandLine;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.Clients.CLI
@@ -159,6 +161,8 @@ namespace BytexDigital.Steam.Clients.CLI
                 Console.WriteLine($"Warning: No branch was specified, using default branch = {opt.Branch}");
             }
 
+            Stopwatch sw = Stopwatch.StartNew();
+
             try
             {
                 Console.WriteLine();
@@ -203,7 +207,10 @@ namespace BytexDigital.Steam.Clients.CLI
                 Environment.Exit(110);
             }
 
-            Console.WriteLine("Download successful");
+            sw.Stop();
+
+            Console.WriteLine();
+            Console.WriteLine($"Download successful, it took {sw.Elapsed.Minutes}:{sw.Elapsed.Seconds}");
         }
     }
 }
