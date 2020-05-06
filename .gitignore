@@ -5,6 +5,7 @@
 
 # TestClient launchSettings
 BytexDigital.Steam.TestClient/Properties/launchSettings.json
+BytexDigital.Steam.Clients.CLI/Properties/launchSettings.json
 
 # User-specific files
 *.rsuser

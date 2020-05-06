@@ -1,6 +1,6 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core.Structs;
-
+using Nito.AsyncEx;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -40,6 +40,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         private readonly ConcurrentDictionary<CdnClientWrapper, int> _cdnClientsFaultsCount = new ConcurrentDictionary<CdnClientWrapper, int>();
         private CancellationTokenSource _cancellationTokenSource;
         private (DownloadFileTarget, Exception)? _fileTargetException;
+        private AsyncAutoResetEvent _chunkWasWrittenEvent = new AsyncAutoResetEvent(false);
         public const int MIN_REQUIRED_ERRORS_FOR_CLIENT_REPLACEMENT = 5;
         public const int NUM_CDN_CLIENTS_UTILIZED = 5;
         public const int MAX_CONCURRENT_DOWNLOADS = 20;
@@ -180,6 +181,18 @@ namespace BytexDigital.Steam.ContentDelivery.Models
 
             return true;
         }
+
+        //public async Task<double> AwaitDownloadProgressChangedAsync(CancellationToken? cancellationTokenOptional = null)
+        //{
+        //    var cancellationToken = cancellationTokenOptional.HasValue ? cancellationTokenOptional.Value : CancellationToken.None;
+
+        //    if (_cancellationTokenSource != null)
+        //    {
+        //        cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_cancellationTokenSource.Token, cancellationToken.Value);
+        //    }
+
+
+        //}
 
         private async Task DownloadDepotChunk(ChunkTask chunk, CdnClientWrapper client, uint depotId, FileWriter fileWriter)
         {
