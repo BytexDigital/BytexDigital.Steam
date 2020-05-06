@@ -198,7 +198,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         {
             try
             {
-                var result = await client.CdnClient.DownloadDepotChunkAsync(depotId, chunk.InternalChunk, client.ServerWrapper.Server).ConfigureAwait(false);
+                var result = await client.CdnClient.DownloadDepotChunkAsync(depotId, chunk.InternalChunk).ConfigureAwait(false);
 
                 try
                 {

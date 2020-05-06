@@ -176,7 +176,13 @@ namespace BytexDigital.Steam.Clients.CLI
                 Console.WriteLine();
 
                 Console.Write("Attempting to start download... ");
-                var downloadHandler = await _steamContentClient.GetAppDataAsync(opt.AppId.Value, opt.WorkshopFileId.Value, opt.ManifestId, opt.Branch, opt.BranchPassword, steamOs);
+
+                var downloadHandler = await _steamContentClient.GetPublishedFileDataAsync(
+                    opt.WorkshopFileId.Value,
+                    opt.ManifestId,
+                    opt.Branch,
+                    opt.BranchPassword, steamOs);
+
                 var downloadTask = downloadHandler.DownloadToFolderAsync(opt.TargetDirectory);
 
                 Console.WriteLine("Success!");

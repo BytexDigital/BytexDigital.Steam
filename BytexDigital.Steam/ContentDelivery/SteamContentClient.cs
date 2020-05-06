@@ -61,8 +61,9 @@ namespace BytexDigital.Steam.ContentDelivery
                 {
                     cdnClientWrapper = await SteamCdnClientPool.GetClient(appId, depotId);
 
+                    await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
 
-                    var manifest = await cdnClientWrapper.CdnClient.DownloadManifestAsync(depotId, manifestId, cdnClientWrapper.ServerWrapper.Server);
+                    var manifest = await cdnClientWrapper.CdnClient.DownloadManifestAsync(depotId, manifestId);
 
                     if (manifest.FilenamesEncrypted)
                     {
@@ -153,12 +154,18 @@ namespace BytexDigital.Steam.ContentDelivery
         }
 
 #nullable enable
-        public async Task<DownloadTask> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null)
+        public async Task<DownloadTask> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null, string? branch = null, string? branchPassword = null, SteamOs? os = null)
 #nullable disable
         {
             var publishedFileDetails = await GetPublishedFileDetailsAsync(publishedFileId);
 
-            return await GetAppDataInternalAsync(publishedFileDetails.consumer_appid, publishedFileDetails.consumer_appid, manifestId ?? publishedFileDetails.hcontent_file, "public", SteamClient.GetSteamOs(), true);
+            return await GetAppDataAsync(
+                publishedFileDetails.consumer_appid,
+                publishedFileDetails.consumer_appid,
+                manifestId ?? publishedFileDetails.hcontent_file,
+                branch,
+                branchPassword,
+                os);
         }
 
 #nullable enable
