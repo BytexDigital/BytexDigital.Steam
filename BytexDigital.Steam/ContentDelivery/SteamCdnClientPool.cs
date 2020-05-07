@@ -28,7 +28,7 @@ namespace BytexDigital.Steam.ContentDelivery
         private readonly IList<SteamContentServerQuality> _steamContentServerQualities;
         private readonly AsyncSemaphore _getClientSemaphore = new AsyncSemaphore(1);
 
-        public const int CLIENTS_REFILL_LIMIT = 20;
+        public const int CLIENTS_REFILL_LIMIT = 50;
 
         public SteamCdnClientPool(SteamContentClient steamContentClient, SteamContentServerQualityProvider steamContentServerQualityProvider)
         {
