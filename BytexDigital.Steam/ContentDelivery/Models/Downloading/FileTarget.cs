@@ -1,10 +1,10 @@
 ﻿using System.IO;
 
-namespace BytexDigital.Steam.ContentDelivery.Models
+namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public abstract class DownloadFileTarget
+    public abstract class FileTarget
     {
-        public static DownloadFileTarget None = null;
+        public static FileTarget None = null;
 
         public double Progress => (double)WrittenBytes / (TotalBytes > 0 ? TotalBytes : 1);
         public ulong TotalBytes { get; internal set; }

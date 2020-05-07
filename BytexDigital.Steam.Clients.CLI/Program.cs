@@ -108,18 +108,6 @@ namespace BytexDigital.Steam.Clients.CLI
                 Environment.Exit(101);
             }
 
-            if (string.IsNullOrEmpty(opt.OS))
-            {
-                Console.WriteLine("Error: Please specify a OS.");
-                Environment.Exit(101);
-            }
-
-            if (!opt.AppId.HasValue)
-            {
-                Console.WriteLine("Error: Please specify an app id.");
-                Environment.Exit(102);
-            }
-
             if (!opt.WorkshopFileId.HasValue)
             {
                 Console.WriteLine("Error: Please specify a workshop item id.");
@@ -129,8 +117,7 @@ namespace BytexDigital.Steam.Clients.CLI
             if (string.IsNullOrEmpty(opt.Branch))
             {
                 opt.Branch = "public";
-
-                Console.WriteLine($"Warning: No branch was specified, using default branch = {opt.Branch}");
+                //Console.WriteLine($"Warning: No branch was specified, using default branch = {opt.Branch}");
             }
 
             Stopwatch sw = Stopwatch.StartNew();
@@ -145,7 +132,8 @@ namespace BytexDigital.Steam.Clients.CLI
                     opt.WorkshopFileId.Value,
                     opt.ManifestId,
                     opt.Branch,
-                    opt.BranchPassword, steamOs);
+                    opt.BranchPassword,
+                    steamOs);
 
                 var downloadTask = downloadHandler.DownloadToFolderAsync(opt.TargetDirectory);
 

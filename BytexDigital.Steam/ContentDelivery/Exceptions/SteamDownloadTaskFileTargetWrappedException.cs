@@ -1,4 +1,4 @@
-﻿using BytexDigital.Steam.ContentDelivery.Models;
+﻿using BytexDigital.Steam.ContentDelivery.Models.Downloading;
 
 using System;
 
@@ -6,9 +6,9 @@ namespace BytexDigital.Steam.ContentDelivery.Exceptions
 {
     public class SteamDownloadTaskFileTargetWrappedException : Exception
     {
-        public DownloadFileTarget ExceptionProducer { get; }
+        public FileTarget ExceptionProducer { get; }
 
-        public SteamDownloadTaskFileTargetWrappedException(DownloadFileTarget exceptionProducer, Exception innerException)
+        public SteamDownloadTaskFileTargetWrappedException(FileTarget exceptionProducer, Exception innerException)
             : base($"An error occurred while trying to write the provided file target handler. View the inner exception for more details.", innerException)
         {
             ExceptionProducer = exceptionProducer;

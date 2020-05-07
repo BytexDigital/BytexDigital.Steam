@@ -1,6 +1,8 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core.Structs;
+
 using Nito.AsyncEx;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,14 +14,15 @@ using System.Threading.Tasks;
 using static BytexDigital.Steam.ContentDelivery.SteamCdnClientPool;
 using static SteamKit2.DepotManifest;
 
-namespace BytexDigital.Steam.ContentDelivery.Models
+namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public class DownloadTask
+    public class FilesHandler : IDownloadHandler
     {
         public Manifest Manifest { get; }
         public AppId AppId { get; }
         public DepotId DepotId { get; }
         public ManifestId ManifestId { get; }
+
         public bool IsRunning { get; private set; }
         public double TotalProgress
         {
@@ -32,20 +35,19 @@ namespace BytexDigital.Steam.ContentDelivery.Models
             }
         }
 
-
         private readonly SteamContentClient _steamContentClient;
         private readonly ConcurrentQueue<ChunkTask> _chunks = new ConcurrentQueue<ChunkTask>();
-        private readonly ConcurrentDictionary<ManifestFile, DownloadFileTarget> _fileTargets = new ConcurrentDictionary<ManifestFile, DownloadFileTarget>();
+        private readonly ConcurrentDictionary<ManifestFile, FileTarget> _fileTargets = new ConcurrentDictionary<ManifestFile, FileTarget>();
         private readonly RoundRobinClientPool _cdnClients = new RoundRobinClientPool();
         private readonly ConcurrentDictionary<CdnClientWrapper, int> _cdnClientsFaultsCount = new ConcurrentDictionary<CdnClientWrapper, int>();
         private CancellationTokenSource _cancellationTokenSource;
-        private (DownloadFileTarget, Exception)? _fileTargetException;
+        private (FileTarget, Exception)? _fileTargetException;
         private AsyncAutoResetEvent _chunkWasWrittenEvent = new AsyncAutoResetEvent(false);
         public const int MIN_REQUIRED_ERRORS_FOR_CLIENT_REPLACEMENT = 5;
         public const int NUM_CDN_CLIENTS_UTILIZED = 5;
         public const int MAX_CONCURRENT_DOWNLOADS = 20;
 
-        public DownloadTask(SteamContentClient steamContentClient, Manifest manifest, AppId appId, DepotId depotId, ManifestId manifestId)
+        public FilesHandler(SteamContentClient steamContentClient, Manifest manifest, AppId appId, DepotId depotId, ManifestId manifestId)
         {
             _steamContentClient = steamContentClient;
             Manifest = manifest;
@@ -54,15 +56,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models
             ManifestId = manifestId;
         }
 
-        public async Task<bool> DownloadToFolderAsync(string directory, CancellationToken? cancellationToken = null)
+        public async Task DownloadToFolderAsync(string directory, CancellationToken? cancellationToken = null)
             => await DownloadToFolderAsync(directory, x => true, cancellationToken);
 
-        public async Task<bool> DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken? cancellationToken = null)
+        public async Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken? cancellationToken = null)
         {
-            return await DownloadAsync(x =>
+            await DownloadAsync(x =>
             {
-                if (x.Flags == Enumerations.ManifestFileFlag.Directory) return DownloadFileTarget.None;
-                if (!condition.Invoke(x)) return DownloadFileTarget.None;
+                if (x.Flags == Enumerations.ManifestFileFlag.Directory) return FileTarget.None;
+                if (!condition.Invoke(x)) return FileTarget.None;
 
                 var filePath = Path.Combine(directory, x.FileName);
                 var fileDirectory = Path.GetDirectoryName(filePath);
@@ -74,11 +76,11 @@ namespace BytexDigital.Steam.ContentDelivery.Models
                 var fileStream = new FileStream(filePath, FileMode.CreateNew);
                 fileStream.SetLength((long)x.TotalSize);
 
-                return new DownloadFileStreamTarget(fileStream);
+                return new FileStreamTarget(fileStream);
             }, cancellationToken);
         }
 
-        public async Task<bool> DownloadAsync(Func<ManifestFile, DownloadFileTarget> fileTargetGenerator, CancellationToken? cancellationToken = null)
+        public async Task DownloadAsync(Func<ManifestFile, FileTarget> fileTargetGenerator, CancellationToken? cancellationToken = null)
         {
             if (IsRunning) throw new InvalidOperationException("Download task was already started.");
 
@@ -94,7 +96,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
             {
                 var target = fileTargetGenerator.Invoke(file);
 
-                if (target == DownloadFileTarget.None) continue;
+                if (target == FileTarget.None) continue;
 
                 _fileTargets.TryAdd(file, target);
 
@@ -123,7 +125,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
                 fileWriters.Add(fileWriter);
             }
 
-            if (_cancellationTokenSource.IsCancellationRequested) return false;
+            if (_cancellationTokenSource.IsCancellationRequested) return;
 
             // Acquire amount of CDN clients
             for (int i = 0; i < NUM_CDN_CLIENTS_UTILIZED; i++)
@@ -136,7 +138,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
 
             while (!fileWriters.All(x => x.IsDone))
             {
-                if (_cancellationTokenSource.IsCancellationRequested) return false;
+                if (_cancellationTokenSource.IsCancellationRequested) return;
                 if (_fileTargetException != null) throw new SteamDownloadTaskFileTargetWrappedException(_fileTargetException.Value.Item1, _fileTargetException.Value.Item2);
 
                 while (chunkTasks.Count(x => !x.IsCompleted) >= MAX_CONCURRENT_DOWNLOADS)
@@ -178,8 +180,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models
             }
 
             foreach (var cdnClientWrapper in _cdnClients.GetAll()) _steamContentClient.SteamCdnClientPool.ReturnClient(cdnClientWrapper);
-
-            return true;
         }
 
         //public async Task<double> AwaitDownloadProgressChangedAsync(CancellationToken? cancellationTokenOptional = null)
@@ -222,11 +222,11 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         private class FileWriter
         {
             public ulong WrittenBytes { get; private set; }
-            public DownloadFileTarget Target { get; }
+            public FileTarget Target { get; }
             public ulong ExpectedBytes { get; private set; }
             public bool IsDone => WrittenBytes == ExpectedBytes;
 
-            public FileWriter(DownloadFileTarget target, ulong expectedBytes)
+            public FileWriter(FileTarget target, ulong expectedBytes)
             {
                 Target = target;
                 ExpectedBytes = expectedBytes;

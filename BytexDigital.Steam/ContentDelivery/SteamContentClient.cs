@@ -1,5 +1,6 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.ContentDelivery.Models;
+using BytexDigital.Steam.ContentDelivery.Models.Downloading;
 using BytexDigital.Steam.Core;
 using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Structs;
@@ -53,7 +54,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
             Exception lastEx = null;
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 30; i++)
             {
                 SteamCdnClientPool.CdnClientWrapper cdnClientWrapper = null;
 
@@ -154,22 +155,29 @@ namespace BytexDigital.Steam.ContentDelivery
         }
 
 #nullable enable
-        public async Task<DownloadTask> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null, string? branch = null, string? branchPassword = null, SteamOs? os = null)
+        public async Task<IDownloadHandler> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null, string? branch = null, string? branchPassword = null, SteamOs? os = null)
 #nullable disable
         {
             var publishedFileDetails = await GetPublishedFileDetailsAsync(publishedFileId);
 
-            return await GetAppDataAsync(
-                publishedFileDetails.consumer_appid,
-                publishedFileDetails.consumer_appid,
-                manifestId ?? publishedFileDetails.hcontent_file,
-                branch,
-                branchPassword,
-                os);
+            if (!string.IsNullOrEmpty(publishedFileDetails.file_url))
+            {
+                return new DirectFileHandler(publishedFileDetails.file_url, publishedFileDetails.filename);
+            }
+            else
+            {
+                return await GetAppDataInternalAsync(
+                    publishedFileDetails.consumer_appid,
+                    publishedFileDetails.consumer_appid,
+                    manifestId ?? publishedFileDetails.hcontent_file,
+                    branch,
+                    os,
+                    true);
+            }
         }
 
 #nullable enable
-        public async Task<DownloadTask> GetAppDataAsync(AppId appId, DepotId depotId, ManifestId? manifestId = null, string branch = "public", string? branchPassword = null, SteamOs? os = null)
+        public async Task<IDownloadHandler> GetAppDataAsync(AppId appId, DepotId depotId, ManifestId? manifestId = null, string branch = "public", string? branchPassword = null, SteamOs? os = null)
 #nullable disable
         {
             if (!manifestId.HasValue)
@@ -244,7 +252,7 @@ namespace BytexDigital.Steam.ContentDelivery
         }
 
 #nullable enable
-        internal async Task<DownloadTask> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
+        internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
 #nullable disable
         {
             if (!await GetHasAccessAsync(appId))
@@ -284,7 +292,8 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
             }
 
-            return new DownloadTask(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
+
+            return new FilesHandler(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
         }
 
         internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(AppId appId)

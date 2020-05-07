@@ -1,12 +1,12 @@
 ﻿using System.IO;
 
-namespace BytexDigital.Steam.ContentDelivery.Models
+namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public class DownloadFileStreamTarget : DownloadFileTarget
+    public class FileStreamTarget : FileTarget
     {
         public FileStream FileStream { get; }
 
-        public DownloadFileStreamTarget(FileStream fileStream)
+        public FileStreamTarget(FileStream fileStream)
         {
             FileStream = fileStream;
         }
