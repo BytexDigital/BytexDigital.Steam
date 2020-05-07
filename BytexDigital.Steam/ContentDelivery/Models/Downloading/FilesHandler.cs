@@ -234,14 +234,17 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             public void Write(ulong offset, byte[] data)
             {
-                Target.Write(offset, data);
-
-                WrittenBytes += (ulong)data.Length;
-                Target.WrittenBytes = WrittenBytes;
-
-                if (WrittenBytes == ExpectedBytes)
+                lock (this)
                 {
-                    Target.Completed();
+                    Target.Write(offset, data);
+
+                    WrittenBytes += (ulong)data.Length;
+                    Target.WrittenBytes = WrittenBytes;
+
+                    if (WrittenBytes == ExpectedBytes)
+                    {
+                        Target.Completed();
+                    }
                 }
             }
         }
