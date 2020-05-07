@@ -37,13 +37,16 @@ namespace BytexDigital.Steam.Clients.CLI
             [Option("os", HelpText = "Specifies an operating system.")]
             public string OS { get; set; }
 
+            [Option("workers", HelpText = "Specifies how many download workers should work on one download task at a time.", Default = 10)]
+            public int WorkerCount { get; set; } = 10;
+
             [Option("appid", HelpText = "Specifies an app ID to use.")]
             public uint? AppId { get; set; }
 
             [Option("manifestid", HelpText = "Specifies an manifest ID to use.")]
             public ulong? ManifestId { get; set; }
 
-            [Option("workshop-download-item", Group = "Action", HelpText = "Downloads a workshop item.", Default = false)]
+            [Option("workshop-download-item", HelpText = "Downloads a workshop item.", Default = false)]
             public bool DownloadWorkshopItem { get; set; }
 
             [Option("workshopid", HelpText = "Specifies a workshop item ID to use.")]
@@ -66,7 +69,7 @@ namespace BytexDigital.Steam.Clients.CLI
         static async Task RunOptions(Options opt)
         {
             _steamClient = new SteamClient(new SteamCredentials(opt.Username, opt.Password));
-            _steamContentClient = new SteamContentClient(_steamClient);
+            _steamContentClient = new SteamContentClient(_steamClient, null, opt.WorkerCount);
 
             Console.Write("Connecting to Steam... ");
 

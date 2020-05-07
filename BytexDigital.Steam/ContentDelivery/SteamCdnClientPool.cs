@@ -22,7 +22,7 @@ namespace BytexDigital.Steam.ContentDelivery
         private readonly SteamContentServerQualityProvider _steamContentServerQualityProvider;
         private readonly SteamKit2.SteamApps _steamApps;
         private readonly ConcurrentBag<CdnServerWrapper> _servers = new ConcurrentBag<CdnServerWrapper>();
-        private readonly List<CdnClientWrapper> _cdnClientWrappersAvailable = new List<CdnClientWrapper>();
+        private readonly List<CdnClient> _cdnClientWrappersAvailable = new List<CdnClient>();
         private readonly AsyncManualResetEvent _poolFilledEvent = new AsyncManualResetEvent(false);
         private static Random _random = new Random();
         private readonly IList<SteamContentServerQuality> _steamContentServerQualities;
@@ -39,7 +39,7 @@ namespace BytexDigital.Steam.ContentDelivery
             _steamContentServerQualities = _steamContentServerQualityProvider.Load() ?? new List<SteamContentServerQuality>();
         }
 
-        public async Task<CdnClientWrapper> GetClient(AppId appId, DepotId depotId, CancellationToken cancellationToken = default)
+        public async Task<CdnClient> GetClient(AppId appId, DepotId depotId, CancellationToken cancellationToken = default)
         {
             await _getClientSemaphore.WaitAsync(cancellationToken);
 
@@ -50,7 +50,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
             await _poolFilledEvent.WaitAsync(cancellationToken);
 
-            CdnClientWrapper recommendedClient = null;
+            CdnClient recommendedClient = null;
 
             lock (this)
             {
@@ -75,7 +75,7 @@ namespace BytexDigital.Steam.ContentDelivery
             return recommendedClient;
         }
 
-        public void ReturnClient(CdnClientWrapper cdnClientWrapper, bool isFunctional = true)
+        public void ReturnClient(CdnClient cdnClientWrapper, bool isFunctional = true)
         {
             if (cdnClientWrapper == null) return;
 
@@ -124,7 +124,7 @@ namespace BytexDigital.Steam.ContentDelivery
             }
         }
 
-        private async Task AuthenticateClientInfoAsync(CdnClientWrapper client, AppId appId, DepotId depotId)
+        private async Task AuthenticateClientInfoAsync(CdnClient client, AppId appId, DepotId depotId)
         {
             if (client.ServerWrapper.Server.Type == "CDN" || client.ServerWrapper.Server.Type == "SteamCache")
             {
@@ -139,7 +139,7 @@ namespace BytexDigital.Steam.ContentDelivery
                     client.AuthTokens.Add(authToken);
                 }
 
-                client.CdnClient.AuthenticateDepot(depotId, await GetDepotKeyAsync(depotId, appId), authToken.Token);
+                client.InternalCdnClient.AuthenticateDepot(depotId, await GetDepotKeyAsync(depotId, appId), authToken.Token);
             }
         }
 
@@ -202,7 +202,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
                         //await cdnClient.ConnectAsync(serverWrapper.Server);
 
-                        var wrapper = new CdnClientWrapper(cdnClient, serverWrapper);
+                        var wrapper = new CdnClient(cdnClient, serverWrapper);
 
                         _cdnClientWrappersAvailable.Add(wrapper);
                     }
@@ -220,7 +220,7 @@ namespace BytexDigital.Steam.ContentDelivery
                     for (int i = 0; i < serverWrapper.Server.NumEntries; i++)
                     {
                         var cdnClient = new CDNClient(_steamContentClient.SteamClient.InternalClient);
-                        var wrapper = new CdnClientWrapper(cdnClient, serverWrapper);
+                        var wrapper = new CdnClient(cdnClient, serverWrapper);
 
                         _cdnClientWrappersAvailable.Add(wrapper);
 
@@ -240,15 +240,15 @@ namespace BytexDigital.Steam.ContentDelivery
                 _steamContentClient.CancellationToken);
         }
 
-        public class CdnClientWrapper
+        public class CdnClient
         {
-            public CdnClientWrapper(SteamKit2.CDNClient cdnClient, CdnServerWrapper serverWrapper)
+            public CdnClient(SteamKit2.CDNClient cdnClient, CdnServerWrapper serverWrapper)
             {
-                CdnClient = cdnClient;
+                InternalCdnClient = cdnClient;
                 ServerWrapper = serverWrapper;
             }
 
-            public CDNClient CdnClient { get; }
+            public CDNClient InternalCdnClient { get; }
             public CdnServerWrapper ServerWrapper { get; }
             public List<CdnClientAuthToken> AuthTokens { get; private set; } = new List<CdnClientAuthToken>();
 

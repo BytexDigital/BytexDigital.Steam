@@ -30,17 +30,19 @@ namespace BytexDigital.Steam.ContentDelivery
         internal SteamApps SteamApps { get; }
         internal SteamUnifiedMessages SteamUnifiedMessagesService { get; }
         internal SteamCdnClientPool SteamCdnClientPool { get; }
+        internal int MaxConcurrentDownloadsPerTask { get; }
 
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly SteamContentServerQualityProvider _steamContentServerQualityProvider;
 
-        public SteamContentClient(Core.SteamClient steamClient, SteamContentServerQualityProvider steamContentServerQualityProvider = null)
+        public SteamContentClient(Core.SteamClient steamClient, SteamContentServerQualityProvider steamContentServerQualityProvider = null, int maxConcurrentDownloadsPerTask = 10)
         {
             SteamClient = steamClient;
             _steamContentServerQualityProvider = steamContentServerQualityProvider ?? new SteamContentServerQualityNoMemoryProvider();
             SteamUnifiedMessagesService = SteamClient.InternalClient.GetHandler<SteamKit.SteamUnifiedMessages>();
             PublishedFileService = SteamUnifiedMessagesService.CreateService<SteamKit.Unified.Internal.IPublishedFile>();
             SteamCdnClientPool = new SteamCdnClientPool(this, _steamContentServerQualityProvider);
+            MaxConcurrentDownloadsPerTask = maxConcurrentDownloadsPerTask;
 
             SteamApps = SteamClient.InternalClient.GetHandler<SteamKit.SteamApps>();
             SteamUser = SteamClient.InternalClient.GetHandler<SteamKit.SteamUser>();
@@ -56,7 +58,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
             for (int i = 0; i < 30; i++)
             {
-                SteamCdnClientPool.CdnClientWrapper cdnClientWrapper = null;
+                SteamCdnClientPool.CdnClient cdnClientWrapper = null;
 
                 try
                 {
@@ -64,7 +66,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
                     //await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
 
-                    var manifest = await cdnClientWrapper.CdnClient.DownloadManifestAsync(depotId, manifestId, cdnClientWrapper.ServerWrapper.Server);
+                    var manifest = await cdnClientWrapper.InternalCdnClient.DownloadManifestAsync(depotId, manifestId, cdnClientWrapper.ServerWrapper.Server);
 
                     if (manifest.FilenamesEncrypted)
                     {

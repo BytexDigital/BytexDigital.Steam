@@ -3,6 +3,8 @@ using BytexDigital.Steam.Core.Structs;
 
 using Nito.AsyncEx;
 
+using SteamKit2;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,7 +13,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using static BytexDigital.Steam.ContentDelivery.Models.Downloading.FilesHandler.RoundRobinClientPool;
 using static BytexDigital.Steam.ContentDelivery.SteamCdnClientPool;
+using static SteamKit2.CDNClient;
 using static SteamKit2.DepotManifest;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
@@ -35,17 +39,16 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        private readonly SteamContentClient _steamContentClient;
-        private readonly ConcurrentQueue<ChunkTask> _chunks = new ConcurrentQueue<ChunkTask>();
+        internal readonly SteamContentClient _steamContentClient;
+        internal readonly ConcurrentQueue<ChunkTask> _chunks = new ConcurrentQueue<ChunkTask>();
         private readonly ConcurrentDictionary<ManifestFile, FileTarget> _fileTargets = new ConcurrentDictionary<ManifestFile, FileTarget>();
-        private readonly RoundRobinClientPool _cdnClients = new RoundRobinClientPool();
-        private readonly ConcurrentDictionary<CdnClientWrapper, int> _cdnClientsFaultsCount = new ConcurrentDictionary<CdnClientWrapper, int>();
+        internal readonly RoundRobinClientPool _cdnClients = new RoundRobinClientPool();
+        internal readonly ConcurrentDictionary<CdnClientMeasurementWrapper, int> _cdnClientsFaultsCount = new ConcurrentDictionary<CdnClientMeasurementWrapper, int>();
         private CancellationTokenSource _cancellationTokenSource;
-        private (FileTarget, Exception)? _fileTargetException;
+        internal (FileTarget, Exception)? _fileTargetException;
         private AsyncAutoResetEvent _chunkWasWrittenEvent = new AsyncAutoResetEvent(false);
         public const int MIN_REQUIRED_ERRORS_FOR_CLIENT_REPLACEMENT = 5;
         public const int NUM_CDN_CLIENTS_UTILIZED = 5;
-        public const int MAX_CONCURRENT_DOWNLOADS = 20;
 
         public FilesHandler(SteamContentClient steamContentClient, Manifest manifest, AppId appId, DepotId depotId, ManifestId manifestId)
         {
@@ -55,6 +58,18 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             DepotId = depotId;
             ManifestId = manifestId;
         }
+
+        //public async Task<double> AwaitDownloadProgressChangedAsync(CancellationToken? cancellationTokenOptional = null)
+        //{
+        //    var cancellationToken = cancellationTokenOptional.HasValue ? cancellationTokenOptional.Value : CancellationToken.None;
+
+        //    if (_cancellationTokenSource != null)
+        //    {
+        //        cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_cancellationTokenSource.Token, cancellationToken.Value);
+        //    }
+
+
+        //}
 
         public async Task DownloadToFolderAsync(string directory, CancellationToken? cancellationToken = null)
             => await DownloadToFolderAsync(directory, x => true, cancellationToken);
@@ -131,19 +146,40 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             for (int i = 0; i < NUM_CDN_CLIENTS_UTILIZED; i++)
             {
                 var cdnClient = await _steamContentClient.SteamCdnClientPool.GetClient(AppId, DepotId, _steamContentClient.CancellationToken);
+                var cdnClientWrapper = new CdnClientMeasurementWrapper(cdnClient);
 
-                _cdnClients.Add(cdnClient);
-                _cdnClientsFaultsCount.TryAdd(cdnClient, 0);
+                _cdnClients.Add(cdnClientWrapper);
+                _cdnClientsFaultsCount.TryAdd(cdnClientWrapper, 0);
             }
 
-            while (!fileWriters.All(x => x.IsDone))
-            {
-                if (_cancellationTokenSource.IsCancellationRequested) return;
-                if (_fileTargetException != null) throw new SteamDownloadTaskFileTargetWrappedException(_fileTargetException.Value.Item1, _fileTargetException.Value.Item2);
+            var workers = new List<Worker>();
 
-                while (chunkTasks.Count(x => !x.IsCompleted) >= MAX_CONCURRENT_DOWNLOADS)
+            for (int i = 0; i < _steamContentClient.MaxConcurrentDownloadsPerTask; i++)
+            {
+                var worker = new Worker(this);
+
+                workers.Add(worker);
+
+                new Thread(worker.Work).Start();
+            }
+
+            while (!workers.All(x => x.Done))
+            {
+                await Task.Delay(100);
+
+                if (_cancellationTokenSource.IsCancellationRequested)
                 {
-                    await Task.WhenAny(chunkTasks);
+                    foreach (var worker in workers)
+                    {
+                        worker.Stop();
+                    }
+
+                    break;
+                }
+
+                if (_fileTargetException.HasValue)
+                {
+                    throw new SteamDownloadTaskFileTargetWrappedException(_fileTargetException.Value.Item1, _fileTargetException.Value.Item2);
                 }
 
                 // Replace faulty cdn clients
@@ -157,69 +193,101 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                     _cdnClients.Remove(faultyCdnClient.Key);
                     _cdnClientsFaultsCount.TryRemove(faultyCdnClient.Key, out var _);
-                    _steamContentClient.SteamCdnClientPool.ReturnClient(faultyCdnClient.Key, false);
+                    _steamContentClient.SteamCdnClientPool.ReturnClient(faultyCdnClient.Key.UnderlyingClient, false);
 
                     var newClient = await _steamContentClient.SteamCdnClientPool.GetClient(AppId, DepotId, _cancellationTokenSource.Token);
+                    var newClientWrapper = new CdnClientMeasurementWrapper(newClient);
 
-                    _cdnClients.Add(newClient);
-                    _cdnClientsFaultsCount.TryAdd(newClient, 0);
+                    _cdnClients.Add(newClientWrapper);
+                    _cdnClientsFaultsCount.TryAdd(newClientWrapper, 0);
                 }
-
-                // Dequeue next chunk to work on it
-                _chunks.TryDequeue(out ChunkTask chunk);
-
-                if (chunk != null)
-                {
-                    var cdnClient = _cdnClients.Get();
-                    var downloadTask = DownloadDepotChunk(chunk, cdnClient, DepotId, chunk.FileWriter);
-
-                    chunkTasks.Add(downloadTask);
-                }
-
-                chunkTasks.RemoveAll(x => x.IsCompleted);
             }
 
-            foreach (var cdnClientWrapper in _cdnClients.GetAll()) _steamContentClient.SteamCdnClientPool.ReturnClient(cdnClientWrapper);
+            foreach (var cdnClientWrapper in _cdnClients.GetAll()) _steamContentClient.SteamCdnClientPool.ReturnClient(cdnClientWrapper.UnderlyingClient);
         }
 
-        //public async Task<double> AwaitDownloadProgressChangedAsync(CancellationToken? cancellationTokenOptional = null)
-        //{
-        //    var cancellationToken = cancellationTokenOptional.HasValue ? cancellationTokenOptional.Value : CancellationToken.None;
-
-        //    if (_cancellationTokenSource != null)
-        //    {
-        //        cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_cancellationTokenSource.Token, cancellationToken.Value);
-        //    }
-
-
-        //}
-
-        private async Task DownloadDepotChunk(ChunkTask chunk, CdnClientWrapper client, uint depotId, FileWriter fileWriter)
+        private class Worker
         {
-            try
-            {
-                var result = await client.CdnClient.DownloadDepotChunkAsync(depotId, chunk.InternalChunk, client.ServerWrapper.Server).ConfigureAwait(false);
+            private readonly FilesHandler _filesHandler;
+            private bool _stop = false;
 
-                try
+            public bool Done { get; private set; }
+
+
+            public Worker(FilesHandler filesHandler)
+            {
+                _filesHandler = filesHandler;
+            }
+
+            public void Work()
+            {
+                while (_filesHandler._chunks.Count > 0 && !_stop)
                 {
-                    fileWriter.Write(chunk.InternalChunk.Offset, result.Data);
-                }
-                catch (Exception ex)
-                {
-                    if (_fileTargetException == null)
+                    _filesHandler._chunks.TryDequeue(out var chunk);
+                    var client = _filesHandler._cdnClients.Get();
+
+                    if (chunk == null) continue;
+
+                    try
                     {
-                        _fileTargetException = (fileWriter.Target, ex);
+                        var result = client.DownloadDepotChunk(_filesHandler.DepotId, chunk.InternalChunk);
+
+                        try
+                        {
+                            chunk.FileWriter.Write(chunk.InternalChunk.Offset, result.Data);
+                        }
+                        catch (Exception ex)
+                        {
+                            if (_filesHandler._fileTargetException == null)
+                            {
+                                _filesHandler._fileTargetException = (chunk.FileWriter.Target, ex);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        _filesHandler._cdnClientsFaultsCount.AddOrUpdate(client, 1, (c, v) => v + 1); // Make sure the dispatcher knows this cdn client resulted in an error
+                        _filesHandler._chunks.Enqueue(chunk);
                     }
                 }
+
+                Done = true;
             }
-            catch
+
+            public void Stop()
             {
-                _cdnClientsFaultsCount.AddOrUpdate(client, 1, (c, v) => v + 1); // Make sure the dispatcher knows this cdn client resulted in an error
-                _chunks.Enqueue(chunk); // Requeue the chunk for later downloading
+                _stop = true;
             }
         }
 
-        private class FileWriter
+
+        //private async Task DownloadDepotChunk(ChunkTask chunk, CdnClientMeasurementWrapper client, uint depotId, FileWriter fileWriter)
+        //{
+        //    try
+        //    {
+        //        var result = await client.DownloadDepotChunkAsync(depotId, chunk.InternalChunk).ConfigureAwait(false);
+
+        //        try
+        //        {
+        //            fileWriter.Write(chunk.InternalChunk.Offset, result.Data);
+        //            Console.WriteLine("Finished task");
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            if (_fileTargetException == null)
+        //            {
+        //                _fileTargetException = (fileWriter.Target, ex);
+        //            }
+        //        }
+        //    }
+        //    catch
+        //    {
+        //        _cdnClientsFaultsCount.AddOrUpdate(client, 1, (c, v) => v + 1); // Make sure the dispatcher knows this cdn client resulted in an error
+        //        _chunks.Enqueue(chunk); // Requeue the chunk for later downloading
+        //    }
+        //}
+
+        internal class FileWriter
         {
             public ulong WrittenBytes { get; private set; }
             public FileTarget Target { get; }
@@ -249,24 +317,24 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        private class ChunkTask
+        internal class ChunkTask
         {
             public FileWriter FileWriter { get; set; }
             public ManifestFileChunkHeader Chunk { get; set; }
             public SteamKit2.DepotManifest.ChunkData InternalChunk { get; set; }
         }
 
-        private class RoundRobinClientPool
+        internal class RoundRobinClientPool
         {
-            private readonly List<CdnClientWrapper> _cdnClientWrappers = new List<CdnClientWrapper>();
+            private readonly List<CdnClientMeasurementWrapper> _cdnClientWrappers = new List<CdnClientMeasurementWrapper>();
             private int _selectionIndex = 0;
 
-            public void Add(CdnClientWrapper cdnClientWrapper)
+            public void Add(CdnClientMeasurementWrapper cdnClientWrapper)
             {
                 _cdnClientWrappers.Add(cdnClientWrapper);
             }
 
-            public CdnClientWrapper Get()
+            public CdnClientMeasurementWrapper Get()
             {
                 var cdnClientWrapper = _cdnClientWrappers[_selectionIndex];
 
@@ -275,12 +343,53 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 return cdnClientWrapper;
             }
 
-            public void Remove(CdnClientWrapper cdnClientWrapper)
+            public void Remove(CdnClientMeasurementWrapper cdnClientWrapper)
             {
                 _cdnClientWrappers.Remove(cdnClientWrapper);
             }
 
-            public IReadOnlyList<CdnClientWrapper> GetAll() => _cdnClientWrappers;
+            public IReadOnlyList<CdnClientMeasurementWrapper> GetAll() => _cdnClientWrappers;
+
+            internal class CdnClientMeasurementWrapper
+            {
+                public CdnClient UnderlyingClient { get; }
+
+                public uint SizeDownloaded { get; private set; } = 0;
+                public double MeasuredSpeed { get; set; } = 0;
+
+                public int ID { get; }
+
+                private static Random _random = new Random();
+
+                public CdnClientMeasurementWrapper(CdnClient cdnClient)
+                {
+                    UnderlyingClient = cdnClient;
+                    ID = _random.Next(1000, 9999);
+                }
+
+                public void ResetChunkCounter()
+                {
+                    lock (this)
+                    {
+                        SizeDownloaded = 0;
+                    }
+                }
+
+                public DepotChunk DownloadDepotChunk(uint depotId, DepotManifest.ChunkData chunk)
+                {
+                    var result = UnderlyingClient.InternalCdnClient.DownloadDepotChunkAsync(depotId, chunk, UnderlyingClient.ServerWrapper.Server)
+                        .ConfigureAwait(false)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    lock (this)
+                    {
+                        SizeDownloaded += result.ChunkInfo.CompressedLength;
+                    }
+
+                    return result;
+                }
+            }
         }
     }
 }
