@@ -295,7 +295,7 @@ namespace BytexDigital.Steam.ContentDelivery
             }
 
 
-            return new FilesHandler(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
+            return new MultipleFilesHandler(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
         }
 
         internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(AppId appId)

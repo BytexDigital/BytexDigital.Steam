@@ -13,14 +13,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using static BytexDigital.Steam.ContentDelivery.Models.Downloading.FilesHandler.RoundRobinClientPool;
+using static BytexDigital.Steam.ContentDelivery.Models.Downloading.MultipleFilesHandler.RoundRobinClientPool;
 using static BytexDigital.Steam.ContentDelivery.SteamCdnClientPool;
 using static SteamKit2.CDNClient;
 using static SteamKit2.DepotManifest;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public class FilesHandler : IDownloadHandler
+    public class MultipleFilesHandler : IDownloadHandler
     {
         public Manifest Manifest { get; }
         public AppId AppId { get; }
@@ -50,7 +50,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public const int MIN_REQUIRED_ERRORS_FOR_CLIENT_REPLACEMENT = 5;
         public const int NUM_CDN_CLIENTS_UTILIZED = 5;
 
-        public FilesHandler(SteamContentClient steamContentClient, Manifest manifest, AppId appId, DepotId depotId, ManifestId manifestId)
+        public MultipleFilesHandler(SteamContentClient steamContentClient, Manifest manifest, AppId appId, DepotId depotId, ManifestId manifestId)
         {
             _steamContentClient = steamContentClient;
             Manifest = manifest;
@@ -208,13 +208,13 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         private class Worker
         {
-            private readonly FilesHandler _filesHandler;
+            private readonly MultipleFilesHandler _filesHandler;
             private bool _stop = false;
 
             public bool Done { get; private set; }
 
 
-            public Worker(FilesHandler filesHandler)
+            public Worker(MultipleFilesHandler filesHandler)
             {
                 _filesHandler = filesHandler;
             }
