@@ -37,8 +37,8 @@ namespace BytexDigital.Steam.Clients.CLI
             [Option("os", HelpText = "Specifies an operating system.")]
             public string OS { get; set; }
 
-            [Option("workers", HelpText = "Specifies how many download workers should work on one download task at a time.", Default = 10)]
-            public int WorkerCount { get; set; } = 10;
+            [Option("workers", HelpText = "Specifies how many download workers should work on one download task at a time.", Default = 15)]
+            public int WorkerCount { get; set; }
 
             [Option("appid", HelpText = "Specifies an app ID to use.")]
             public uint? AppId { get; set; }

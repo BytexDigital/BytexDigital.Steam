@@ -62,7 +62,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 try
                 {
-                    cdnClientWrapper = await SteamCdnClientPool.GetClient(appId, depotId);
+                    cdnClientWrapper = await SteamCdnClientPool.GetClientAsync(appId, depotId);
 
                     //await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
 

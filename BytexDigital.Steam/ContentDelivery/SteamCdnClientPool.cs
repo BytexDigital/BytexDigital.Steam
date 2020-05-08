@@ -9,6 +9,7 @@ using SteamKit2;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,7 +40,7 @@ namespace BytexDigital.Steam.ContentDelivery
             _steamContentServerQualities = _steamContentServerQualityProvider.Load() ?? new List<SteamContentServerQuality>();
         }
 
-        public async Task<CdnClient> GetClient(AppId appId, DepotId depotId, CancellationToken cancellationToken = default)
+        public async Task<CdnClient> GetClientAsync(AppId appId, DepotId depotId, CancellationToken cancellationToken = default)
         {
             await _getClientSemaphore.WaitAsync(cancellationToken);
 
@@ -213,7 +214,7 @@ namespace BytexDigital.Steam.ContentDelivery
                 var orderedServers = new Queue<CdnServerWrapper>(_servers.OrderByDescending(x => x.Score).OrderBy(x => x.Server.WeightedLoad).OrderBy(x => x.Server.Load));
                 int refillsRemaining = CLIENTS_REFILL_LIMIT;
 
-                while (refillsRemaining > 0)
+                while (orderedServers.Count > 0)
                 {
                     var serverWrapper = orderedServers.Dequeue();
 
