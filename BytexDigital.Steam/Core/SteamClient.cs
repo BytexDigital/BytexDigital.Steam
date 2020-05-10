@@ -228,12 +228,12 @@ namespace BytexDigital.Steam.Core
                         TwoFactorCode = code;
                     }
 
-                    AttemptLogin();
+                    InternalClient.Connect();
                 }
                 else
                 {
-                    _clientFaultedEvent.Set();
                     FaultException = new SteamLogonException(callback.Result);
+                    _clientFaultedEvent.Set();
                 }
             }
         }
