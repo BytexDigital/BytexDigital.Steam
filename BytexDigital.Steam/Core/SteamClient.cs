@@ -1,4 +1,5 @@
-﻿using BytexDigital.Steam.Core.Enumerations;
+﻿using BytexDigital.Steam.ContentDelivery.Models;
+using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Exceptions;
 
 using Nito.AsyncEx;
@@ -31,6 +32,9 @@ namespace BytexDigital.Steam.Core
         /// </summary>
         public bool IsFaulted => FaultReason != SteamClientFaultReason.None;
 
+        public string TwoFactorCode { get; set; }
+        public string EmailAuthCode { get; private set; }
+
         public uint SuggestedCellId { get; private set; }
 
         public SteamClientFaultReason FaultReason { get; private set; }
@@ -43,12 +47,17 @@ namespace BytexDigital.Steam.Core
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly AsyncManualResetEvent _clientReadyEvent = new AsyncManualResetEvent(false);
         private readonly AsyncManualResetEvent _clientFaultedEvent = new AsyncManualResetEvent(false);
+        private readonly Func<SteamLoginCallbackEventArgs, string> _logonErrorHandlerCallback;
         private bool _isClientRunning = false;
 
-        public SteamClient(SteamCredentials credentials)
+        public SteamClient(SteamCredentials credentials) : this(credentials, x => null)
+        {
+        }
+
+        public SteamClient(SteamCredentials credentials, Func<SteamLoginCallbackEventArgs, string> logonErrorHandlerCallback)
         {
             Credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
-
+            _logonErrorHandlerCallback = logonErrorHandlerCallback;
             InternalClient = new SteamKit.SteamClient();
 
             _cancellationTokenSource = new CancellationTokenSource();
@@ -156,6 +165,8 @@ namespace BytexDigital.Steam.Core
             {
                 Username = Credentials.Username,
                 Password = Credentials.Password,
+                TwoFactorCode = TwoFactorCode,
+                AuthCode = EmailAuthCode,
                 LoginID = (uint)new Random().Next(100000000, 999999999)
             });
         }
@@ -203,8 +214,26 @@ namespace BytexDigital.Steam.Core
             }
             else
             {
-                _clientFaultedEvent.Set();
-                FaultReason = SteamClientFaultReason.InvalidCredentials;
+                if (callback.Result == EResult.AccountLogonDenied || callback.Result == EResult.AccountLoginDeniedNeedTwoFactor)
+                {
+                    var code = _logonErrorHandlerCallback.Invoke(new SteamLoginCallbackEventArgs(callback.Result));
+
+                    if (callback.Result == EResult.AccountLogonDenied)
+                    {
+                        EmailAuthCode = code;
+                    }
+                    else
+                    {
+                        TwoFactorCode = code;
+                    }
+
+                    AttemptLogin();
+                }
+                else
+                {
+                    _clientFaultedEvent.Set();
+                    FaultReason = SteamClientFaultReason.InvalidCredentials;
+                }
             }
         }
 

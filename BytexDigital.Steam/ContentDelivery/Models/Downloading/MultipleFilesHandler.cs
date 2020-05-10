@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using static BytexDigital.Steam.ContentDelivery.Models.Downloading.MultipleFilesHandler;
@@ -24,6 +26,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public ManifestId ManifestId { get; }
 
         public bool IsRunning { get; private set; }
+        public double BufferUsage { get; private set; }
+        public int TotalFileCount => _fileTargets.Count;
+        public ulong TotalFileSize => _fileTargets.Select(x => x.Key.TotalSize).Aggregate(0UL, (a, b) => a + b);
         public double TotalProgress
         {
             get
@@ -35,7 +40,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        public double BufferUsage { get; private set; }
 
         internal readonly SteamContentClient _steamContentClient;
         internal readonly ConcurrentQueue<ChunkTask> _chunks = new ConcurrentQueue<ChunkTask>();
@@ -68,10 +72,34 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         //}
 
-        public async Task DownloadToFolderAsync(string directory, CancellationToken? cancellationToken = null)
+        public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
             => await DownloadToFolderAsync(directory, x => true, cancellationToken);
 
-        public async Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken? cancellationToken = null)
+        public async Task DownloadChangesToFolderAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            await DownloadToFolderAsync(directory, file =>
+            {
+                var filePath = Path.Combine(directory, file.FileName);
+
+                if (!File.Exists(filePath)) return true;
+
+                byte[] localHash = null;
+
+                // Calculate local SHA1
+                using (FileStream fs = new FileStream(filePath, FileMode.Open))
+                using (BufferedStream bs = new BufferedStream(fs))
+                {
+                    using (SHA1Managed sha1 = new SHA1Managed())
+                    {
+                        localHash = sha1.ComputeHash(bs);
+                    }
+                }
+
+                return !localHash.SequenceEqual(file.FileHash);
+            }, cancellationToken);
+        }
+
+        public async Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
         {
             await DownloadAsync(x =>
             {
@@ -92,14 +120,14 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }, cancellationToken);
         }
 
-        public async Task DownloadAsync(Func<ManifestFile, FileTarget> fileTargetGenerator, CancellationToken? cancellationToken = null)
+        public async Task DownloadAsync(Func<ManifestFile, FileTarget> fileTargetGenerator, CancellationToken cancellationToken = default)
         {
             if (IsRunning) throw new InvalidOperationException("Download task was already started.");
 
             IsRunning = true;
 
             // Create cancellation token source
-            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken ?? CancellationToken.None, _steamContentClient.CancellationToken);
+            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _steamContentClient.CancellationToken);
 
             var chunkTasks = new List<Task>();
             var fileWriters = new List<FileWriter>();
@@ -137,7 +165,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 fileWriters.Add(fileWriter);
             }
 
-            if (_cancellationTokenSource.IsCancellationRequested) return;
+            if (_fileTargets.Count == 0 || _cancellationTokenSource.IsCancellationRequested) return;
 
             // Get depot key for decryption
             _depotKey = await (await _steamContentClient.SteamCdnServerPool.GetClientAsync()).GetDepotKeyAsync(DepotId, AppId);
@@ -161,7 +189,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             bool isDownloadingLocked = false;
 
-            while (!downloadWorkers.All(x => x.Done))
+            while (!downloadWorkers.All(x => x.Done) || !_downloadedChunksBuffer.IsEmpty)
             {
                 await Task.Delay(100);
 

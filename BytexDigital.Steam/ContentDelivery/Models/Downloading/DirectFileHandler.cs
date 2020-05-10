@@ -13,6 +13,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public string FileUrl { get; }
         public string FileName { get; }
         public double BufferUsage => 0;
+        public int TotalFileCount => 1;
+        public ulong TotalFileSize { get; private set; }
 
         public DirectFileHandler(string fileUrl, string fileName)
         {
@@ -20,7 +22,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             FileName = fileName;
         }
 
-        public async Task DownloadToFolderAsync(string directory, CancellationToken? cancellationToken = null)
+        public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
         {
             var webClient = new WebClient();
 
@@ -39,6 +41,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         private void WebClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
+            TotalFileSize = (ulong)e.TotalBytesToReceive;
             TotalProgress = (double)e.ProgressPercentage / 100;
         }
     }
