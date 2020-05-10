@@ -78,35 +78,25 @@ namespace BytexDigital.Steam.Core
         /// </summary>
         /// <returns>True if successfully connected.</returns>
         /// <exception cref="SteamClientFaultedException">Client is faulted.</exception>
-        public async Task<bool> ConnectAsync() => await ConnectAsync(CancellationToken.None);
+        public async Task ConnectAsync() => await ConnectAsync(CancellationToken.None);
 
         /// <summary>
         /// Asks the underlying client to connect to Steam and perform a login with the given <see cref="Credentials"/>.
         /// </summary>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>True if successfully connected.</returns>
         /// <exception cref="SteamClientFaultedException">Client is faulted.</exception>
-        public async Task<bool> ConnectAsync(CancellationToken cancellationToken)
+        public async Task ConnectAsync(CancellationToken cancellationToken)
         {
-            if (_isClientRunning) return true;
+            if (_isClientRunning) return;
 
             InternalClient.Connect();
 
-            try
-            {
-                var readyTask = _clientReadyEvent.WaitAsync(cancellationToken);
-                var faultedTask = _clientFaultedEvent.WaitAsync();
+            var readyTask = _clientReadyEvent.WaitAsync(cancellationToken);
+            var faultedTask = _clientFaultedEvent.WaitAsync();
 
-                var task = await Task.WhenAny(readyTask, faultedTask);
+            var task = await Task.WhenAny(readyTask, faultedTask);
 
-                if (task == faultedTask) throw new SteamClientFaultedException(FaultReason);
-
-                return IsConnected;
-            }
-            catch
-            {
-                return false;
-            }
+            if (task == faultedTask) throw new SteamClientFaultedException(FaultReason);
         }
 
         /// <summary>

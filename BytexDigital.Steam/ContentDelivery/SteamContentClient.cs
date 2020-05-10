@@ -1,5 +1,6 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.ContentDelivery.Models;
+using BytexDigital.Steam.ContentDelivery.Models.Downloading;
 using BytexDigital.Steam.Core;
 using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Structs;
@@ -28,19 +29,28 @@ namespace BytexDigital.Steam.ContentDelivery
         internal SteamUser SteamUser { get; }
         internal SteamApps SteamApps { get; }
         internal SteamUnifiedMessages SteamUnifiedMessagesService { get; }
-        internal SteamCdnClientPool SteamCdnClientPool { get; }
+        internal SteamCdnServerPool SteamCdnServerPool { get; }
+        internal int MaxConcurrentDownloadsPerTask { get; }
+        internal ulong ChunkBufferSize { get; }
+        internal double BufferUsageThreshold { get; }
 
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly SteamContentServerQualityProvider _steamContentServerQualityProvider;
 
-        public SteamContentClient(Core.SteamClient steamClient, SteamContentServerQualityProvider steamContentServerQualityProvider = null)
+        public SteamContentClient(Core.SteamClient steamClient,
+                                  SteamContentServerQualityProvider steamContentServerQualityProvider = null,
+                                  int maxConcurrentDownloadsPerTask = 10,
+                                  ulong chunkBufferSize = 3221225472,
+                                  double bufferUsageThreshold = 1)
         {
             SteamClient = steamClient;
             _steamContentServerQualityProvider = steamContentServerQualityProvider ?? new SteamContentServerQualityNoMemoryProvider();
             SteamUnifiedMessagesService = SteamClient.InternalClient.GetHandler<SteamKit.SteamUnifiedMessages>();
             PublishedFileService = SteamUnifiedMessagesService.CreateService<SteamKit.Unified.Internal.IPublishedFile>();
-            SteamCdnClientPool = new SteamCdnClientPool(this, _steamContentServerQualityProvider);
-
+            SteamCdnServerPool = new SteamCdnServerPool(this, _steamContentServerQualityProvider);
+            MaxConcurrentDownloadsPerTask = maxConcurrentDownloadsPerTask;
+            ChunkBufferSize = chunkBufferSize;
+            BufferUsageThreshold = bufferUsageThreshold;
             SteamApps = SteamClient.InternalClient.GetHandler<SteamKit.SteamApps>();
             SteamUser = SteamClient.InternalClient.GetHandler<SteamKit.SteamUser>();
 
@@ -53,24 +63,23 @@ namespace BytexDigital.Steam.ContentDelivery
 
             Exception lastEx = null;
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 30; i++)
             {
-                SteamCdnClientPool.CdnClientWrapper cdnClientWrapper = null;
+                SteamCdnClient steamCdnClient;
 
                 try
                 {
-                    cdnClientWrapper = await SteamCdnClientPool.GetClient(appId, depotId);
+                    steamCdnClient = await SteamCdnServerPool.GetClientAsync();
 
+                    //await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
 
-                    var manifest = await cdnClientWrapper.CdnClient.DownloadManifestAsync(depotId, manifestId, cdnClientWrapper.ServerWrapper.Server);
+                    var manifest = await steamCdnClient.DownloadManifestAsync(appId, depotId, manifestId);
 
                     if (manifest.FilenamesEncrypted)
                     {
-                        var depotKey = await SteamCdnClientPool.GetDepotKeyAsync(depotId, appId);
+                        var depotKey = await steamCdnClient.GetDepotKeyAsync(depotId, appId);
                         manifest.DecryptFilenames(depotKey);
                     }
-
-                    SteamCdnClientPool.ReturnClient(cdnClientWrapper);
 
                     return manifest;
                 }
@@ -80,12 +89,10 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
                 catch (HttpRequestException ex)
                 {
-                    SteamCdnClientPool.ReturnClient(cdnClientWrapper);
                     lastEx = ex;
                 }
                 catch (Exception ex)
                 {
-                    SteamCdnClientPool.ReturnClient(cdnClientWrapper);
                     lastEx = ex;
                 }
             }
@@ -110,17 +117,72 @@ namespace BytexDigital.Steam.ContentDelivery
             throw new SteamPublishedFileDetailsFetchException(result.Result);
         }
 
+        public async Task<IList<PublishedFileDetails>> GetPublishedFilesForAppIdAsync(AppId appId, CancellationToken? cancellationToken = null)
+        {
+            cancellationToken = cancellationToken ?? CancellationToken.None;
+
+            string paginationCursor = null;
+            List<PublishedFileDetails> items = new List<PublishedFileDetails>();
+
+            while (!cancellationToken.Value.IsCancellationRequested)
+            {
+                var methodResponse = await PublishedFileService.SendMessage(api => api.QueryFiles(new CPublishedFile_QueryFiles_Request
+                {
+                    appid = appId,
+                    return_vote_data = true,
+                    return_children = true,
+                    return_for_sale_data = true,
+                    return_kv_tags = true,
+                    return_metadata = true,
+                    return_tags = true,
+                    return_previews = true,
+                    return_details = true,
+                    return_short_description = true,
+                    page = 1,
+                    numperpage = 100,
+                    query_type = 11,
+                    filetype = (uint)EWorkshopFileType.GameManagedItem,
+                    cursor = paginationCursor
+                }));
+
+                var returnedItems = methodResponse.GetDeserializedResponse<CPublishedFile_QueryFiles_Response>();
+
+                items.AddRange(returnedItems.publishedfiledetails);
+                paginationCursor = returnedItems.next_cursor;
+
+                if (paginationCursor == null)
+                {
+                    break;
+                }
+            }
+
+            return items;
+        }
+
 #nullable enable
-        public async Task<DownloadTask> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null)
+        public async Task<IDownloadHandler> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null, string? branch = null, string? branchPassword = null, SteamOs? os = null)
 #nullable disable
         {
             var publishedFileDetails = await GetPublishedFileDetailsAsync(publishedFileId);
 
-            return await GetAppDataInternalAsync(publishedFileDetails.consumer_appid, publishedFileDetails.consumer_appid, manifestId ?? publishedFileDetails.hcontent_file, "public", SteamClient.GetSteamOs(), true);
+            if (!string.IsNullOrEmpty(publishedFileDetails.file_url))
+            {
+                return new DirectFileHandler(publishedFileDetails.file_url, publishedFileDetails.filename);
+            }
+            else
+            {
+                return await GetAppDataInternalAsync(
+                    publishedFileDetails.consumer_appid,
+                    publishedFileDetails.consumer_appid,
+                    manifestId ?? publishedFileDetails.hcontent_file,
+                    branch,
+                    os,
+                    true);
+            }
         }
 
 #nullable enable
-        public async Task<DownloadTask> GetAppDataAsync(AppId appId, DepotId depotId, ManifestId? manifestId = null, string branch = "public", string? branchPassword = null, SteamOs? os = null)
+        public async Task<IDownloadHandler> GetAppDataAsync(AppId appId, DepotId depotId, ManifestId? manifestId = null, string branch = "public", string? branchPassword = null, SteamOs? os = null)
 #nullable disable
         {
             if (!manifestId.HasValue)
@@ -195,7 +257,7 @@ namespace BytexDigital.Steam.ContentDelivery
         }
 
 #nullable enable
-        internal async Task<DownloadTask> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
+        internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
 #nullable disable
         {
             if (!await GetHasAccessAsync(appId))
@@ -235,7 +297,8 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
             }
 
-            return new DownloadTask(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
+
+            return new MultipleFilesHandler(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
         }
 
         internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(AppId appId)
