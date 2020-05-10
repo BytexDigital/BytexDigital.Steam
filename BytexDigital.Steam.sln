@@ -13,8 +13,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GitHub", "GitHub", "{DA1D79
 		README.md = README.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BytexDigital.Steam.Clients.CLI", "BytexDigital.Steam.Clients.CLI\BytexDigital.Steam.Clients.CLI.csproj", "{D3C365CF-2C5E-4421-905F-A41747C3D6B0}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,10 +27,6 @@ Global
 		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FD7A5358-9D26-48B5-A6A5-55D9D023B03E}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D3C365CF-2C5E-4421-905F-A41747C3D6B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D3C365CF-2C5E-4421-905F-A41747C3D6B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D3C365CF-2C5E-4421-905F-A41747C3D6B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D3C365CF-2C5E-4421-905F-A41747C3D6B0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

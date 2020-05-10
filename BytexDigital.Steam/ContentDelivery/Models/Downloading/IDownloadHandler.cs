@@ -7,6 +7,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
     {
         bool IsRunning { get; }
         double TotalProgress { get; }
+        double BufferUsage { get; }
         Task DownloadToFolderAsync(string directory, CancellationToken? cancellationToken = null);
     }
 }

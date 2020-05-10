@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
@@ -10,7 +11,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public ulong TotalBytes { get; internal set; }
         public ulong WrittenBytes { get; internal set; }
 
-        public abstract void Write(ulong offset, byte[] data);
-        public abstract void Completed();
+        public abstract Task WriteAsync(ulong offset, byte[] data);
+        public abstract Task CompleteAsync();
     }
 }

@@ -29,21 +29,28 @@ namespace BytexDigital.Steam.ContentDelivery
         internal SteamUser SteamUser { get; }
         internal SteamApps SteamApps { get; }
         internal SteamUnifiedMessages SteamUnifiedMessagesService { get; }
-        internal SteamCdnClientPool SteamCdnClientPool { get; }
+        internal SteamCdnServerPool SteamCdnServerPool { get; }
         internal int MaxConcurrentDownloadsPerTask { get; }
+        internal ulong ChunkBufferSize { get; }
+        internal double BufferUsageThreshold { get; }
 
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly SteamContentServerQualityProvider _steamContentServerQualityProvider;
 
-        public SteamContentClient(Core.SteamClient steamClient, SteamContentServerQualityProvider steamContentServerQualityProvider = null, int maxConcurrentDownloadsPerTask = 10)
+        public SteamContentClient(Core.SteamClient steamClient,
+                                  SteamContentServerQualityProvider steamContentServerQualityProvider = null,
+                                  int maxConcurrentDownloadsPerTask = 10,
+                                  ulong chunkBufferSize = 3221225472,
+                                  double bufferUsageThreshold = 1)
         {
             SteamClient = steamClient;
             _steamContentServerQualityProvider = steamContentServerQualityProvider ?? new SteamContentServerQualityNoMemoryProvider();
             SteamUnifiedMessagesService = SteamClient.InternalClient.GetHandler<SteamKit.SteamUnifiedMessages>();
             PublishedFileService = SteamUnifiedMessagesService.CreateService<SteamKit.Unified.Internal.IPublishedFile>();
-            SteamCdnClientPool = new SteamCdnClientPool(this, _steamContentServerQualityProvider);
+            SteamCdnServerPool = new SteamCdnServerPool(this, _steamContentServerQualityProvider);
             MaxConcurrentDownloadsPerTask = maxConcurrentDownloadsPerTask;
-
+            ChunkBufferSize = chunkBufferSize;
+            BufferUsageThreshold = bufferUsageThreshold;
             SteamApps = SteamClient.InternalClient.GetHandler<SteamKit.SteamApps>();
             SteamUser = SteamClient.InternalClient.GetHandler<SteamKit.SteamUser>();
 
@@ -58,23 +65,21 @@ namespace BytexDigital.Steam.ContentDelivery
 
             for (int i = 0; i < 30; i++)
             {
-                SteamCdnClientPool.CdnClient cdnClientWrapper = null;
+                SteamCdnClient steamCdnClient;
 
                 try
                 {
-                    cdnClientWrapper = await SteamCdnClientPool.GetClientAsync(appId, depotId);
+                    steamCdnClient = await SteamCdnServerPool.GetClientAsync();
 
                     //await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
 
-                    var manifest = await cdnClientWrapper.InternalCdnClient.DownloadManifestAsync(depotId, manifestId, cdnClientWrapper.ServerWrapper.Server);
+                    var manifest = await steamCdnClient.DownloadManifestAsync(appId, depotId, manifestId);
 
                     if (manifest.FilenamesEncrypted)
                     {
-                        var depotKey = await SteamCdnClientPool.GetDepotKeyAsync(depotId, appId);
+                        var depotKey = await steamCdnClient.GetDepotKeyAsync(depotId, appId);
                         manifest.DecryptFilenames(depotKey);
                     }
-
-                    SteamCdnClientPool.ReturnClient(cdnClientWrapper);
 
                     return manifest;
                 }
@@ -84,12 +89,10 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
                 catch (HttpRequestException ex)
                 {
-                    SteamCdnClientPool.ReturnClient(cdnClientWrapper);
                     lastEx = ex;
                 }
                 catch (Exception ex)
                 {
-                    SteamCdnClientPool.ReturnClient(cdnClientWrapper);
                     lastEx = ex;
                 }
             }

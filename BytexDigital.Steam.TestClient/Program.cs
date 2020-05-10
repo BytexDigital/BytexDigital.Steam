@@ -31,6 +31,9 @@ namespace BytexDigital.Steam.TestClient
 
             Console.WriteLine("Connected");
 
+            var pubFile = await steamContentClient.GetPublishedFileDetailsAsync(1765453539);
+            var manifest = await steamContentClient.GetManifestAsync(221100, 221100, pubFile.hcontent_file);
+
             try
             {
                 var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);

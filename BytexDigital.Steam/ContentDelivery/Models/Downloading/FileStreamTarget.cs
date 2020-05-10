@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
@@ -11,22 +12,16 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             FileStream = fileStream;
         }
 
-        public override void Completed()
+        public override async Task CompleteAsync()
         {
-            lock (FileStream)
-            {
-                FileStream.Flush();
-                FileStream.Close();
-            }
+            await FileStream.FlushAsync().ConfigureAwait(false);
+            FileStream.Close();
         }
 
-        public override void Write(ulong offset, byte[] data)
+        public override async Task WriteAsync(ulong offset, byte[] data)
         {
-            lock (FileStream)
-            {
-                FileStream.Seek((long)offset, SeekOrigin.Begin);
-                FileStream.Write(data, 0, data.Length);
-            }
+            FileStream.Seek((long)offset, SeekOrigin.Begin);
+            await FileStream.WriteAsync(data, 0, data.Length).ConfigureAwait(false);
         }
     }
 }

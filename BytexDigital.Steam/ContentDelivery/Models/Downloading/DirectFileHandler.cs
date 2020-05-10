@@ -12,6 +12,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public double TotalProgress { get; private set; }
         public string FileUrl { get; }
         public string FileName { get; }
+        public double BufferUsage => 0;
 
         public DirectFileHandler(string fileUrl, string fileName)
         {
