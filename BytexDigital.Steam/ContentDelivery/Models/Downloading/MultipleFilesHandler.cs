@@ -3,16 +3,17 @@ using BytexDigital.Steam.Core.Structs;
 
 using Nito.AsyncEx;
 
+using SteamKit2;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+
 using static BytexDigital.Steam.ContentDelivery.Models.Downloading.MultipleFilesHandler;
 using static SteamKit2.DepotManifest;
 
@@ -276,13 +277,30 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                         try
                         {
                             var depotChunk = new SteamKit2.CDNClient.DepotChunk(availableData.chunkTask.InternalChunk, availableData.data);
+                            var verified = false;
 
                             if (_filesHandler._depotKey != null)
                             {
                                 depotChunk.Process(_filesHandler._depotKey);
+                                verified = true;
+                            }
+
+                            if (!verified)
+                            {
+                                using (SHA1Managed sha1 = new SHA1Managed())
+                                {
+                                    if (!depotChunk.ChunkInfo.Checksum.SequenceEqual(CryptoHelper.AdlerHash(depotChunk.Data)))
+                                    {
+                                        throw new InvalidOperationException("Invalid chunk data received.");
+                                    }
+                                }
                             }
 
                             await availableData.chunkTask.FileWriter.WriteAsync(availableData.chunkTask.Chunk.Offset, depotChunk.Data);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            _filesHandler._chunks.Enqueue(availableData.chunkTask);
                         }
                         catch (Exception ex)
                         {
@@ -328,7 +346,11 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                         _filesHandler._chunks.TryDequeue(out var chunk);
 
-                        if (chunk == null) continue;
+                        if (chunk == null)
+                        {
+                            await Task.Delay(50);
+                            continue;
+                        }
 
                         await _filesHandler._allowChunkDownloading.LockAsync();
                         _filesHandler._allowChunkDownloading.Release();
