@@ -1,4 +1,5 @@
-﻿using BytexDigital.Steam.ContentDelivery.Models;
+﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
+using BytexDigital.Steam.ContentDelivery.Models;
 using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Exceptions;
 
@@ -30,14 +31,14 @@ namespace BytexDigital.Steam.Core
         /// <summary>
         /// Indicates whether the client is faulted. See <see cref="FaultReason"/> for more information.
         /// </summary>
-        public bool IsFaulted => FaultReason != SteamClientFaultReason.None;
+        public bool IsFaulted => FaultException != null;
 
         public string TwoFactorCode { get; set; }
         public string EmailAuthCode { get; private set; }
 
         public uint SuggestedCellId { get; private set; }
 
-        public SteamClientFaultReason FaultReason { get; private set; }
+        public Exception FaultException { get; private set; }
 
         internal SteamKit.CallbackManager CallbackManager { get; set; }
         internal IList<SteamKit.SteamApps.LicenseListCallback.License> Licenses { get; set; }
@@ -105,7 +106,7 @@ namespace BytexDigital.Steam.Core
 
             var task = await Task.WhenAny(readyTask, faultedTask);
 
-            if (task == faultedTask) throw new SteamClientFaultedException(FaultReason);
+            if (task == faultedTask) throw new SteamClientFaultedException(FaultException);
         }
 
         /// <summary>
@@ -124,7 +125,7 @@ namespace BytexDigital.Steam.Core
 
             if (task == faultedTask)
             {
-                throw new SteamClientFaultedException(FaultReason);
+                throw new SteamClientFaultedException(FaultException);
             }
 
             if (!readyTask.IsCompletedSuccessfully)
@@ -232,7 +233,7 @@ namespace BytexDigital.Steam.Core
                 else
                 {
                     _clientFaultedEvent.Set();
-                    FaultReason = SteamClientFaultReason.InvalidCredentials;
+                    FaultException = new SteamLogonException(callback.Result);
                 }
             }
         }
