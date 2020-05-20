@@ -6,10 +6,11 @@ using BytexDigital.Steam.Core.Exceptions;
 using Nito.AsyncEx;
 
 using SteamKit2;
-
+using SteamKit2.Unified.Internal;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -49,16 +50,19 @@ namespace BytexDigital.Steam.Core
         private readonly AsyncManualResetEvent _clientReadyEvent = new AsyncManualResetEvent(false);
         private readonly AsyncManualResetEvent _clientFaultedEvent = new AsyncManualResetEvent(false);
         private readonly Func<SteamLoginCallbackEventArgs, string> _logonErrorHandlerCallback;
+        private readonly SteamAuthenticationCodesProvider _codesProvider;
+        private readonly SteamAuthenticationFilesProvider _authenticationProvider;
         private bool _isClientRunning = false;
 
-        public SteamClient(SteamCredentials credentials) : this(credentials, x => null)
+        public SteamClient(SteamCredentials credentials) : this(credentials, new DefaultSteamAuthenticationCodesProvider(), new DefaultSteamAuthenticationFilesProvider())
         {
         }
 
-        public SteamClient(SteamCredentials credentials, Func<SteamLoginCallbackEventArgs, string> logonErrorHandlerCallback)
+        public SteamClient(SteamCredentials credentials, SteamAuthenticationCodesProvider codesProvider, SteamAuthenticationFilesProvider authenticationProvider)
         {
             Credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
-            _logonErrorHandlerCallback = logonErrorHandlerCallback;
+            _codesProvider = codesProvider;
+            _authenticationProvider = authenticationProvider;
             InternalClient = new SteamKit.SteamClient();
 
             _cancellationTokenSource = new CancellationTokenSource();
@@ -74,6 +78,8 @@ namespace BytexDigital.Steam.Core
             CallbackManager.Subscribe<SteamKit.SteamUser.LoggedOnCallback>(OnLoggedOn);
             CallbackManager.Subscribe<SteamKit.SteamUser.LoggedOffCallback>(OnLoggedOff);
             CallbackManager.Subscribe<SteamKit.SteamApps.LicenseListCallback>(OnLicenseList);
+            CallbackManager.Subscribe<SteamKit.SteamUser.UpdateMachineAuthCallback>(OnMachineAuth);
+            CallbackManager.Subscribe<SteamKit.SteamUser.LoginKeyCallback>(OnLoginKey);
 
             InternalClient.Connect();
         }
@@ -162,12 +168,27 @@ namespace BytexDigital.Steam.Core
 
         private void AttemptLogin()
         {
+            byte[] hash = null;
+
+            using (var sha = SHA1.Create())
+            {
+                var data = _authenticationProvider.GetSentryFileContent(Credentials);
+
+                if (data != null)
+                {
+                    hash = sha.ComputeHash(data);
+                }
+            }
+
             _steamUser.LogOn(new SteamKit.SteamUser.LogOnDetails
             {
                 Username = Credentials.Username,
                 Password = Credentials.Password,
                 TwoFactorCode = TwoFactorCode,
                 AuthCode = EmailAuthCode,
+                SentryFileHash = hash,
+                LoginKey = _authenticationProvider.GetLoginKey(Credentials),
+                ShouldRememberPassword = true,
                 LoginID = (uint)new Random().Next(100000000, 999999999)
             });
         }
@@ -179,6 +200,42 @@ namespace BytexDigital.Steam.Core
                 await Task.Delay(TimeSpan.FromMilliseconds(100));
                 CallbackManager.RunWaitAllCallbacks(TimeSpan.FromMilliseconds(100));
             }
+        }
+
+        private void OnLoginKey(SteamUser.LoginKeyCallback callback)
+        {
+            _authenticationProvider.SaveLoginKey(Credentials, callback.LoginKey);
+            _steamUser.AcceptNewLoginKey(callback);
+        }
+
+        private void OnMachineAuth(SteamUser.UpdateMachineAuthCallback callback)
+        {
+            byte[] hash = default;
+
+            using (var sha = SHA1.Create())
+            {
+                hash = sha.ComputeHash(callback.Data);
+            }
+
+            _authenticationProvider.SaveSentryFileContent(Credentials, callback.Data);
+
+            _steamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
+            {
+                JobID = callback.JobID,
+
+                FileName = callback.FileName,
+
+                BytesWritten = callback.BytesToWrite,
+                FileSize = callback.Data.Length,
+                Offset = callback.Offset,
+
+                Result = EResult.OK,
+                LastError = 0,
+
+                OneTimePassword = callback.OneTimePassword,
+
+                SentryFileHash = hash
+            });
         }
 
         private void OnLicenseList(SteamApps.LicenseListCallback callback)
@@ -217,15 +274,13 @@ namespace BytexDigital.Steam.Core
             {
                 if (callback.Result == EResult.AccountLogonDenied || callback.Result == EResult.AccountLoginDeniedNeedTwoFactor)
                 {
-                    var code = _logonErrorHandlerCallback.Invoke(new SteamLoginCallbackEventArgs(callback.Result));
-
                     if (callback.Result == EResult.AccountLogonDenied)
                     {
-                        EmailAuthCode = code;
+                        EmailAuthCode = _codesProvider.GetEmailAuthenticationCode(Credentials);
                     }
                     else
                     {
-                        TwoFactorCode = code;
+                        TwoFactorCode = _codesProvider.GetTwoFactorAuthenticationCode(Credentials);
                     }
 
                     InternalClient.Connect();

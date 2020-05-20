@@ -10,7 +10,7 @@
 
         public SteamOs(string identifier)
         {
-            Identifier = identifier ?? throw new System.ArgumentNullException(nameof(identifier));
+            Identifier = identifier ?? throw new System.ArgumentNullException(nameof(identifier), "The OS identifier is not valid.");
         }
 
         public static implicit operator SteamOs(string identifier) => new SteamOs(identifier);
