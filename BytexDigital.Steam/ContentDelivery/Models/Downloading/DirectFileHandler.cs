@@ -28,15 +28,19 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             Directory.CreateDirectory(directory);
 
-            await webClient.DownloadFileTaskAsync(new Uri(FileUrl), Path.Combine(directory, FileName));
-
             webClient.DownloadProgressChanged += WebClient_DownloadProgressChanged;
             webClient.DownloadFileCompleted += WebClient_DownloadFileCompleted;
+
+            if (IsRunning) throw new InvalidOperationException("Download task was already started.");
+            IsRunning = true;
+
+            await webClient.DownloadFileTaskAsync(new Uri(FileUrl), Path.Combine(directory, FileName));
         }
 
         private void WebClient_DownloadFileCompleted(object sender, System.ComponentModel.AsyncCompletedEventArgs e)
         {
             TotalProgress = 1;
+            IsRunning = false;
         }
 
         private void WebClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)

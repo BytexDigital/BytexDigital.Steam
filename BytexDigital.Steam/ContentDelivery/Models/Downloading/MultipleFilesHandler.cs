@@ -62,18 +62,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             ManifestId = manifestId;
         }
 
-        //public async Task<double> AwaitDownloadProgressChangedAsync(CancellationToken? cancellationTokenOptional = null)
-        //{
-        //    var cancellationToken = cancellationTokenOptional.HasValue ? cancellationTokenOptional.Value : CancellationToken.None;
-
-        //    if (_cancellationTokenSource != null)
-        //    {
-        //        cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_cancellationTokenSource.Token, cancellationToken.Value);
-        //    }
-
-
-        //}
-
         public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
             => await DownloadToFolderAsync(directory, x => true, cancellationToken);
 
@@ -209,11 +197,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     throw faultedTask.Task.Exception;
                 }
 
-                if (_chunks.Count < 100)
-                {
-
-                }
-
                 ulong bytesInBuffer = _downloadedChunksBuffer
                         .Select(x => (ulong)x.Item1.InternalChunk.UncompressedLength)
                         .Aggregate(0UL, (a, b) => a + b);
@@ -252,7 +235,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             Task.WaitAll(downloadWorkers.Select(x => x.Task).ToArray());
             Task.WaitAll(writeWorkers.Select(x => x.Task).ToArray());
 
-            var a = fileWriters.Where(x => !x.IsDone);
+            IsRunning = false;
         }
 
         private class ChunkWriterWorker
@@ -394,7 +377,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     }
 
                     Done = true;
-                }, TaskCreationOptions.LongRunning);
+                }, TaskCreationOptions.LongRunning).GetAwaiter().GetResult();
             }
 
             public void Stop()
