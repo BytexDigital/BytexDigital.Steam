@@ -49,7 +49,6 @@ namespace BytexDigital.Steam.Core
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly AsyncManualResetEvent _clientReadyEvent = new AsyncManualResetEvent(false);
         private readonly AsyncManualResetEvent _clientFaultedEvent = new AsyncManualResetEvent(false);
-        private readonly Func<SteamLoginCallbackEventArgs, string> _logonErrorHandlerCallback;
         private readonly SteamAuthenticationCodesProvider _codesProvider;
         private readonly SteamAuthenticationFilesProvider _authenticationProvider;
         private bool _isClientRunning = false;

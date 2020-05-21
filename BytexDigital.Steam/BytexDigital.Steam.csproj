@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Version>0.7.1-beta</Version>
+    <Version>0.7.2-beta</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Copyright>Bytex Digital UG (haftungsbeschränkt)</Copyright>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -22,10 +22,15 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+    <None Include="logo_squared_128.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
   <PropertyGroup>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+    <PackageIcon>logo_squared_128.png</PackageIcon>
   </PropertyGroup>
 
   <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">

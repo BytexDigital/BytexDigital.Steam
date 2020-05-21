@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -130,7 +131,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             // Create cancellation token source
             _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _steamContentClient.CancellationToken);
 
-            var chunkTasks = new List<Task>();
             var fileWriters = new List<FileWriter>();
 
             foreach (var file in Manifest.Files)
@@ -173,6 +173,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             var downloadWorkers = new List<ChunkDownloadWorker>();
             var writeWorkers = new List<ChunkWriterWorker>();
+            var amountChunksExpected = _chunks.Count;
 
             for (int i = 0; i < _steamContentClient.MaxConcurrentDownloadsPerTask; i++)
             {
@@ -190,7 +191,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             bool isDownloadingLocked = false;
 
-            while (!downloadWorkers.All(x => x.Done) || !_downloadedChunksBuffer.IsEmpty)
+            while (!fileWriters.All(x => x.IsDone) || !_downloadedChunksBuffer.IsEmpty)
             {
                 await Task.Delay(100);
 
@@ -206,6 +207,11 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     var faultedTask = downloadWorkers.First(x => x.Task.IsFaulted);
 
                     throw faultedTask.Task.Exception;
+                }
+
+                if (_chunks.Count < 100)
+                {
+
                 }
 
                 ulong bytesInBuffer = _downloadedChunksBuffer
@@ -240,9 +246,13 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
 
             // Stop all writers
-            foreach (var writer in writeWorkers) writer.Stop();
+            foreach (var worker in downloadWorkers) worker.Stop();
+            foreach (var worker in writeWorkers) worker.Stop();
 
+            Task.WaitAll(downloadWorkers.Select(x => x.Task).ToArray());
             Task.WaitAll(writeWorkers.Select(x => x.Task).ToArray());
+
+            var a = fileWriters.Where(x => !x.IsDone);
         }
 
         private class ChunkWriterWorker
@@ -272,7 +282,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                         bool hasData = _filesHandler._downloadedChunksBuffer.TryDequeue(out (ChunkTask chunkTask, byte[] data) availableData);
 
-                        if (!hasData) continue;
+                        if (!hasData)
+                        {
+                            continue;
+                        }
 
                         try
                         {
@@ -307,7 +320,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                             throw new SteamDownloadTaskFileTargetWrappedException(availableData.chunkTask.FileWriter.Target, ex);
                         }
                     }
-                }, TaskCreationOptions.LongRunning);
+                }, TaskCreationOptions.LongRunning).GetAwaiter().GetResult();
             }
 
             public void Stop()
@@ -366,7 +379,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                             _filesHandler._downloadedChunksBuffer.Enqueue((chunk, result));
                         }
-                        catch (Exception ex) when (!(ex is SteamDownloadTaskFileTargetWrappedException))
+                        catch (Exception ex)/* when (!(ex is SteamDownloadTaskFileTargetWrappedException))*/
                         {
                             if (faultCounter >= 5)
                             {
@@ -374,6 +387,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                                 _filesHandler._steamContentClient.SteamCdnServerPool.NotifyClientError(cdnClient);
                                 cdnClient = null;
                             }
+
+                            Console.WriteLine("Chunk download failed, requeueing");
+                            _filesHandler._chunks.Enqueue(chunk);
                         }
                     }
 
@@ -404,19 +420,18 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             public async Task WriteAsync(ulong offset, byte[] data)
             {
-                await _writeLock.LockAsync();
-
-                await Target.WriteAsync(offset, data);
-
-                WrittenBytes += (ulong)data.Length;
-                Target.WrittenBytes = WrittenBytes;
-
-                if (WrittenBytes == ExpectedBytes)
+                using (var semLock = await _writeLock.LockAsync())
                 {
-                    await Target.CompleteAsync();
-                }
+                    await Target.WriteAsync(offset, data);
 
-                _writeLock.Release();
+                    WrittenBytes += (ulong)data.Length;
+                    Target.WrittenBytes = WrittenBytes;
+
+                    if (WrittenBytes == ExpectedBytes)
+                    {
+                        await Target.CompleteAsync();
+                    }
+                }
             }
         }
     }
