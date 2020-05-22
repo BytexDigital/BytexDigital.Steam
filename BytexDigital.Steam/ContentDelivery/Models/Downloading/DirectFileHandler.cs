@@ -22,6 +22,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             FileName = fileName;
         }
 
+        public Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
+            => DownloadToFolderAsync(directory, cancellationToken);
+
         public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
         {
             var webClient = new WebClient();

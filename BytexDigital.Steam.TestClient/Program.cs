@@ -11,13 +11,24 @@ namespace BytexDigital.Steam.TestClient
     {
         static async Task Main(string[] args)
         {
-            if (args.Length != 2)
+            if (args.Length < 2)
             {
                 Console.WriteLine("Expected two arguments: username password");
                 return;
             }
 
-            SteamClient steamClient = new SteamClient(new SteamCredentials(args[0], args[1]));
+            SteamCredentials steamCredentials = null;
+
+            if (args.Length == 2)
+            {
+                steamCredentials = new SteamCredentials(args[0], args[1]);
+            }
+            else
+            {
+                steamCredentials = new SteamCredentials(args[0], args[1], args[2]);
+            }
+
+            SteamClient steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
             SteamContentClient steamContentClient = new SteamContentClient(steamClient);
 
             try
@@ -27,12 +38,10 @@ namespace BytexDigital.Steam.TestClient
             catch (Exception ex)
             {
                 Console.WriteLine($"Could not connect to Steam: {ex.Message}");
+                return;
             }
 
             Console.WriteLine("Connected");
-
-            var pubFile = await steamContentClient.GetPublishedFileDetailsAsync(1765453539);
-            var manifest = await steamContentClient.GetManifestAsync(221100, 221100, pubFile.hcontent_file);
 
             try
             {
@@ -59,6 +68,31 @@ namespace BytexDigital.Steam.TestClient
 
             steamClient.Shutdown();
             Console.WriteLine("Done");
+        }
+
+        private class AuthCodeProvider : SteamAuthenticationCodesProvider
+        {
+            public override string GetEmailAuthenticationCode(SteamCredentials steamCredentials)
+            {
+                Console.Write("Please enter your email auth code: ");
+
+                string input = Console.ReadLine();
+
+                Console.Write("Retrying... ");
+
+                return input;
+            }
+
+            public override string GetTwoFactorAuthenticationCode(SteamCredentials steamCredentials)
+            {
+                Console.Write("Please enter your 2FA code: ");
+
+                string input = Console.ReadLine();
+
+                Console.Write("Retrying... ");
+
+                return input;
+            }
         }
     }
 }

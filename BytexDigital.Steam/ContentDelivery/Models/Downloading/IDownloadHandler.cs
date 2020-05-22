@@ -1,4 +1,5 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
@@ -11,5 +12,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         ulong TotalFileSize { get; }
         double BufferUsage { get; }
         Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default);
+        Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default);
     }
 }
