@@ -371,7 +371,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                                 cdnClient = null;
                             }
 
-                            Console.WriteLine("Chunk download failed, requeueing");
+
                             _filesHandler._chunks.Enqueue(chunk);
                         }
                     }

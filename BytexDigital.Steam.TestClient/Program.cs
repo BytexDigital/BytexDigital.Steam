@@ -45,8 +45,8 @@ namespace BytexDigital.Steam.TestClient
 
             try
             {
-                var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
-                //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(1765453539);
+                //var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
+                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2105680247);
 
                 Console.WriteLine("Starting download");
                 var downloadTask = downloadHandler.DownloadToFolderAsync(@".\download");
