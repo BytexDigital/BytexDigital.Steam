@@ -254,11 +254,11 @@ namespace BytexDigital.Steam.ContentDelivery
                     {
                         if (manifest["encrypted_gid_2"] != KeyValue.Invalid)
                         {
-                            return new DepotEncryptedManifest(manifest.Name, manifest["encrypted_gid_2"].Value, DepotEncryptedManifest.EncryptionVersion.V2);
+                            return new DepotEncryptedManifest(appId, depotId, manifest.Name, manifest["encrypted_gid_2"].Value, DepotEncryptedManifest.EncryptionVersion.V2);
                         }
                         else
                         {
-                            return new DepotEncryptedManifest(manifest.Name, manifest["encrypted_gid"].Value, DepotEncryptedManifest.EncryptionVersion.V1);
+                            return new DepotEncryptedManifest(appId, depotId, manifest.Name, manifest["encrypted_gid"].Value, DepotEncryptedManifest.EncryptionVersion.V1);
                         }
                     })
                     .ToList();

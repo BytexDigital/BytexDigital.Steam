@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Version>0.7.4-beta</Version>
+    <Version>0.7.40-beta</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Copyright>Bytex Digital UG (haftungsbeschränkt)</Copyright>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
