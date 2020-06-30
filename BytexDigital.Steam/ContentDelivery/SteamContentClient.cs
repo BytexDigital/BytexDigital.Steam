@@ -291,6 +291,41 @@ namespace BytexDigital.Steam.ContentDelivery
             return parsedBranches;
         }
 
+        public async Task<Models.DepotManifest> DecryptDepotManifestAsync(DepotEncryptedManifest manifest, string branchPassword)
+        {
+            if (manifest.Version == DepotEncryptedManifest.EncryptionVersion.V1)
+            {
+                byte[] manifestCryptoInput = DecodeHexString(manifest.EncryptedManifestId);
+                byte[] manifestIdBytes = SteamKit.CryptoHelper.VerifyAndDecryptPassword(manifestCryptoInput, branchPassword);
+
+                if (manifestIdBytes == null)
+                {
+                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName, branchPassword);
+                }
+
+                return new Models.DepotManifest(manifest.BranchName, BitConverter.ToUInt64(manifestIdBytes));
+            }
+            else
+            {
+                var result = await SteamApps.CheckAppBetaPassword(manifest.AppId, branchPassword);
+
+                if (!result.BetaPasswords.Any(x => x.Key == manifest.BranchName)) throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName, branchPassword);
+
+                byte[] manifestCryptoInput = DecodeHexString(manifest.EncryptedManifestId);
+
+                try
+                {
+                    byte[] manifestIdBytes = SteamKit.CryptoHelper.SymmetricDecryptECB(manifestCryptoInput, result.BetaPasswords[manifest.BranchName]);
+
+                    return new Models.DepotManifest(manifest.BranchName, BitConverter.ToUInt64(manifestIdBytes));
+                }
+                catch (Exception ex)
+                {
+                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName, branchPassword, ex);
+                }
+            }
+        }
+
 #nullable enable
         public async Task<ManifestId> GetDepotDefaultManifestIdAsync(AppId appId, DepotId depotId, string branch = "public", string? branchPassword = null)
 #nullable disable
