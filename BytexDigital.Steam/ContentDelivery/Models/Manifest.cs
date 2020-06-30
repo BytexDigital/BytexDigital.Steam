@@ -27,7 +27,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         public ulong TotalUncompressedSize { get; }
         public ulong TotalCompressedSize { get; }
 
-        public static implicit operator Manifest(DepotManifest x) =>
+        public static implicit operator Manifest(SteamKit2.DepotManifest x) =>
             new Manifest(x.Files.Select(x => (ManifestFile)x).ToList(), x.DepotID, x.ManifestGID, x.CreationTime, x.TotalUncompressedSize, x.TotalCompressedSize);
     }
 }

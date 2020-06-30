@@ -364,15 +364,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                         }
                         catch (Exception ex)/* when (!(ex is SteamDownloadTaskFileTargetWrappedException))*/
                         {
+                            faultCounter++;
+                            _filesHandler._chunks.Enqueue(chunk);
+
                             if (faultCounter >= 5)
                             {
                                 //_filesHandler._steamContentClient.SteamCdnServerPool.ReturnClient(cdnClient, false);
                                 _filesHandler._steamContentClient.SteamCdnServerPool.NotifyClientError(cdnClient);
                                 cdnClient = null;
                             }
-
-
-                            _filesHandler._chunks.Enqueue(chunk);
                         }
                     }
 

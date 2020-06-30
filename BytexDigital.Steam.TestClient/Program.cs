@@ -43,28 +43,31 @@ namespace BytexDigital.Steam.TestClient
 
             Console.WriteLine("Connected");
 
-            try
-            {
-                //var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
-                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2105680247);
+            var depots = await steamContentClient.GetDepotsAsync(107410);
+            var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
-                Console.WriteLine("Starting download");
-                var downloadTask = downloadHandler.DownloadToFolderAsync(@".\download");
+            //try
+            //{
+            //    var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 107411, null, "public", null, SteamOs.Windows);
+            //    //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2105680247);
 
-                while (!downloadTask.IsCompleted)
-                {
-                    var delayTask = Task.Delay(100);
-                    var t = await Task.WhenAny(delayTask, downloadTask);
+            //    Console.WriteLine("Starting download");
+            //    var downloadTask = downloadHandler.DownloadToFolderAsync(@".\download");
 
-                    Console.WriteLine($"Progress {(downloadHandler.TotalProgress * 100).ToString("00.00")}%");
-                }
+            //    while (!downloadTask.IsCompleted)
+            //    {
+            //        var delayTask = Task.Delay(100);
+            //        var t = await Task.WhenAny(delayTask, downloadTask);
 
-                await downloadTask;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Download failed: {ex.Message}");
-            }
+            //        Console.WriteLine($"Progress {(downloadHandler.TotalProgress * 100).ToString("00.00")}%");
+            //    }
+
+            //    await downloadTask;
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine($"Download failed: {ex.Message}");
+            //}
 
             steamClient.Shutdown();
             Console.WriteLine("Done");
