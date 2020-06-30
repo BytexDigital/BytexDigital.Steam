@@ -24,7 +24,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         public ulong TotalSize { get; }
         public byte[] FileHash { get; }
 
-        public static implicit operator ManifestFile(DepotManifest.FileData file) =>
-            new ManifestFile(file.FileName, file.Chunks.Select(x => (ManifestFileChunkHeader) x).ToList(), (ManifestFileFlag) (int) file.Flags, file.TotalSize, file.FileHash);
+        public static implicit operator ManifestFile(SteamKit2.DepotManifest.FileData file) =>
+            new ManifestFile(file.FileName, file.Chunks.Select(x => (ManifestFileChunkHeader)x).ToList(), (ManifestFileFlag)(int)file.Flags, file.TotalSize, file.FileHash);
     }
 }

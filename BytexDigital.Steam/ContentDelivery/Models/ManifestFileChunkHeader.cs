@@ -19,7 +19,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         public uint CompressedLength { get; }
         public uint UncompressedLength { get; }
 
-        public static implicit operator ManifestFileChunkHeader(DepotManifest.ChunkData chunk) =>
+        public static implicit operator ManifestFileChunkHeader(SteamKit2.DepotManifest.ChunkData chunk) =>
             new ManifestFileChunkHeader(chunk.ChunkID, chunk.Checksum, chunk.Offset, chunk.CompressedLength, chunk.UncompressedLength);
     }
 }

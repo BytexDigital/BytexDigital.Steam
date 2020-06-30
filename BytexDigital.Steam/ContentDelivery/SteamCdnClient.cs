@@ -1,8 +1,10 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.ContentDelivery.Models;
 using BytexDigital.Steam.Core.Structs;
+
 using SteamKit2;
 using SteamKit2.Unified.Internal;
+
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -11,6 +13,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+
 using static SteamKit2.CDNClient;
 using static SteamKit2.DepotManifest;
 
@@ -36,7 +39,7 @@ namespace BytexDigital.Steam.ContentDelivery
             InternalCdnClient = new CDNClient(steamContentClient.SteamClient.InternalClient);
         }
 
-        public async Task<DepotManifest> DownloadManifestAsync(AppId appId, DepotId depotId, ManifestId manifestId)
+        public async Task<SteamKit2.DepotManifest> DownloadManifestAsync(AppId appId, DepotId depotId, ManifestId manifestId)
         {
             await AuthenticateCdnClientAsync(appId, depotId);
 

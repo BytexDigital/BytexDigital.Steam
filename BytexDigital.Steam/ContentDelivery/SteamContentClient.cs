@@ -7,6 +7,7 @@ using BytexDigital.Steam.Core.Structs;
 using BytexDigital.Steam.Extensions;
 
 using SteamKit2;
+using SteamKit2.Internal;
 using SteamKit2.Unified.Internal;
 
 using System;
@@ -193,6 +194,136 @@ namespace BytexDigital.Steam.ContentDelivery
             }
 
             return await GetAppDataInternalAsync(appId, depotId, manifestId.Value, branch, os ?? SteamClient.GetSteamOs(), false);
+        }
+
+        public async Task<IReadOnlyList<Depot>> GetDepotsOfBranchAsync(AppId appId, string branch)
+        {
+            return (await GetDepotsAsync(appId))
+                .Where(x => x.Manifests.Any(x => x.BranchName.ToLowerInvariant() == branch.ToLowerInvariant()))
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<Depot>> GetDepotsAsync(AppId appId)
+        {
+            var appInfo = await GetAppInfoAsync(appId);
+            var depots = appInfo.KeyValues.Children.First(x => x.Name == "depots");
+            var parsedDepots = new List<Depot>();
+
+            foreach (var depot in depots.Children)
+            {
+                bool isDepot = uint.TryParse(depot.Name, out uint depotId);
+
+                if (!isDepot) continue;
+
+                string name = depot["name"].Value;
+                ulong maxSize = depot["maxsize"].AsUnsignedLong(0);
+                bool isSharedInstall = depot["sharedinstall"].AsBoolean(false);
+                AppId? depotFromApp = depot["depotfromapp"].AsUnsignedInteger(default);
+
+                if (depotFromApp.Value.Id == default)
+                {
+                    depotFromApp = null;
+                }
+
+                List<SteamOs> operatingSystems = new List<SteamOs>();
+                Dictionary<string, string> configEntries = new Dictionary<string, string>();
+
+                foreach (var configEntry in depot["config"].Children)
+                {
+                    if (configEntry.Name == "oslist")
+                    {
+                        operatingSystems.AddRange(configEntry
+                            .AsString()
+                            .Split(',')
+                            .Select(identifier => new SteamOs(identifier)));
+                    }
+                    else
+                    {
+                        configEntries.Add(configEntry.Name, configEntry.Value);
+                    }
+                }
+
+                List<Models.DepotManifest> manifests = depot["manifests"]
+                    .Children
+                    .Select(x => new Models.DepotManifest(x.Name, x.AsUnsignedLong()))
+                    .ToList();
+
+                List<Models.DepotEncryptedManifest> encryptedManifests = depot["encryptedmanifests"]
+                    .Children
+                    .Select(manifest =>
+                    {
+                        if (manifest["encrypted_gid_2"] != KeyValue.Invalid)
+                        {
+                            return new DepotEncryptedManifest(appId, depotId, manifest.Name, manifest["encrypted_gid_2"].Value, DepotEncryptedManifest.EncryptionVersion.V2);
+                        }
+                        else
+                        {
+                            return new DepotEncryptedManifest(appId, depotId, manifest.Name, manifest["encrypted_gid"].Value, DepotEncryptedManifest.EncryptionVersion.V1);
+                        }
+                    })
+                    .ToList();
+
+                parsedDepots.Add(new Depot(depotId, name, maxSize, operatingSystems, manifests, encryptedManifests, configEntries, isSharedInstall, depotFromApp));
+            }
+
+            return parsedDepots;
+        }
+
+        public async Task<IReadOnlyList<Branch>> GetBranchesAsync(AppId appId)
+        {
+            var appInfo = await GetAppInfoAsync(appId);
+            var depots = appInfo.KeyValues.Children.First(x => x.Name == "depots");
+            var branches = depots["branches"];
+
+            List<Branch> parsedBranches = new List<Branch>();
+
+            foreach (var branch in branches.Children)
+            {
+                var name = branch.Name;
+                ulong buildid = branch["buildid"].AsUnsignedLong(0);
+                string description = branch["description"].AsString();
+                bool requiresPassword = branch["pwdrequired"].AsBoolean(false);
+                long timeUpdated = branch["timeupdated"].AsLong();
+
+                parsedBranches.Add(new Branch(name, buildid, description, requiresPassword, DateTimeOffset.FromUnixTimeSeconds(timeUpdated)));
+            }
+
+            return parsedBranches;
+        }
+
+        public async Task<Models.DepotManifest> DecryptDepotManifestAsync(DepotEncryptedManifest manifest, string branchPassword)
+        {
+            if (manifest.Version == DepotEncryptedManifest.EncryptionVersion.V1)
+            {
+                byte[] manifestCryptoInput = DecodeHexString(manifest.EncryptedManifestId);
+                byte[] manifestIdBytes = SteamKit.CryptoHelper.VerifyAndDecryptPassword(manifestCryptoInput, branchPassword);
+
+                if (manifestIdBytes == null)
+                {
+                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName, branchPassword);
+                }
+
+                return new Models.DepotManifest(manifest.BranchName, BitConverter.ToUInt64(manifestIdBytes));
+            }
+            else
+            {
+                var result = await SteamApps.CheckAppBetaPassword(manifest.AppId, branchPassword);
+
+                if (!result.BetaPasswords.Any(x => x.Key == manifest.BranchName)) throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName, branchPassword);
+
+                byte[] manifestCryptoInput = DecodeHexString(manifest.EncryptedManifestId);
+
+                try
+                {
+                    byte[] manifestIdBytes = SteamKit.CryptoHelper.SymmetricDecryptECB(manifestCryptoInput, result.BetaPasswords[manifest.BranchName]);
+
+                    return new Models.DepotManifest(manifest.BranchName, BitConverter.ToUInt64(manifestIdBytes));
+                }
+                catch (Exception ex)
+                {
+                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName, branchPassword, ex);
+                }
+            }
         }
 
 #nullable enable
