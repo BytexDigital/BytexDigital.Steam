@@ -11,6 +11,7 @@ using SteamKit2.Internal;
 using SteamKit2.Unified.Internal;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -35,6 +36,7 @@ namespace BytexDigital.Steam.ContentDelivery
         internal ulong ChunkBufferSize { get; }
         internal double BufferUsageThreshold { get; }
 
+        private readonly ConcurrentDictionary<AppId, ulong> _productAccessKeys = new ConcurrentDictionary<AppId, ulong>();
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly SteamContentServerQualityProvider _steamContentServerQualityProvider;
 
@@ -436,11 +438,14 @@ namespace BytexDigital.Steam.ContentDelivery
 
         internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(AppId appId)
         {
-            var accessTokenRequestResult = await SteamApps.PICSGetAccessTokens(new List<uint> { appId }, new List<uint>());
+            if (!_productAccessKeys.ContainsKey(appId))
+            {
+                var accessTokenRequestResult = await SteamApps.PICSGetAccessTokens(new List<uint> { appId }, new List<uint>());
 
-            if (accessTokenRequestResult.AppTokensDenied.Contains(appId)) throw new SteamAppAccessTokenDeniedException(appId);
+                if (accessTokenRequestResult.AppTokensDenied.Contains(appId)) throw new SteamAppAccessTokenDeniedException(appId);
 
-            //var accessToken = accessTokenRequestResult.AppTokens[appId];
+                _productAccessKeys.AddOrUpdate(appId, accessTokenRequestResult.AppTokens[appId], (appId, val) => accessTokenRequestResult.AppTokens[appId]);
+            }
 
             var result = await SteamApps.PICSGetProductInfo(appId, null, onlyPublic: false);
 

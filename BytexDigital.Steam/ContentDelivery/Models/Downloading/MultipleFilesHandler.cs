@@ -174,6 +174,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 writeWorkers.Add(new ChunkWriterWorker(this));
             }
 
+            // Complete all FileWriter targets that contain empty files
+            foreach (var fileWriter in fileWriters)
+            {
+                if (fileWriter.IsDone)
+                {
+                    await fileWriter.Target.CompleteAsync();
+                }
+            }
+
             foreach (var worker in downloadWorkers) worker.Work();
             foreach (var worker in writeWorkers) worker.Work();
 
