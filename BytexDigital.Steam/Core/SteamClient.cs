@@ -7,6 +7,7 @@ using Nito.AsyncEx;
 
 using SteamKit2;
 using SteamKit2.Unified.Internal;
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -167,29 +168,36 @@ namespace BytexDigital.Steam.Core
 
         private void AttemptLogin()
         {
-            byte[] hash = null;
-
-            using (var sha = SHA1.Create())
+            if (!Credentials.IsAnonymous)
             {
-                var data = _authenticationProvider.GetSentryFileContent(Credentials);
+                byte[] hash = null;
 
-                if (data != null)
+                using (var sha = SHA1.Create())
                 {
-                    hash = sha.ComputeHash(data);
-                }
-            }
+                    var data = _authenticationProvider.GetSentryFileContent(Credentials);
 
-            _steamUser.LogOn(new SteamKit.SteamUser.LogOnDetails
+                    if (data != null)
+                    {
+                        hash = sha.ComputeHash(data);
+                    }
+                }
+
+                _steamUser.LogOn(new SteamKit.SteamUser.LogOnDetails
+                {
+                    Username = Credentials.Username,
+                    Password = Credentials.Password,
+                    TwoFactorCode = TwoFactorCode,
+                    AuthCode = EmailAuthCode,
+                    SentryFileHash = hash,
+                    LoginKey = _authenticationProvider.GetLoginKey(Credentials),
+                    ShouldRememberPassword = true,
+                    LoginID = (uint)new Random().Next(100000000, 999999999)
+                });
+            }
+            else
             {
-                Username = Credentials.Username,
-                Password = Credentials.Password,
-                TwoFactorCode = TwoFactorCode,
-                AuthCode = EmailAuthCode,
-                SentryFileHash = hash,
-                LoginKey = _authenticationProvider.GetLoginKey(Credentials),
-                ShouldRememberPassword = true,
-                LoginID = (uint)new Random().Next(100000000, 999999999)
-            });
+                _steamUser.LogOnAnonymous();
+            }
         }
 
         private async Task CallbackManagerHandler()

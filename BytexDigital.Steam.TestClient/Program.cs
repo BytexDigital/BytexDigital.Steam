@@ -44,11 +44,11 @@ namespace BytexDigital.Steam.TestClient
 
             Console.WriteLine("Connected");
 
-            var depots = await steamContentClient.GetDepotsAsync(107410);
-            var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
-
             try
             {
+                var depots = await steamContentClient.GetDepotsAsync(107410);
+                var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
+
                 //var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 107411, null, "public", null, SteamOs.Windows);
                 var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2242952694);
 
