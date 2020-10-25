@@ -65,30 +65,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
             => await DownloadToFolderAsync(directory, x => true, cancellationToken);
 
-        public async Task DownloadChangesToFolderAsync(string directory, CancellationToken cancellationToken = default)
-        {
-            await DownloadToFolderAsync(directory, file =>
-            {
-                var filePath = Path.Combine(directory, file.FileName);
-
-                if (!File.Exists(filePath)) return true;
-
-                byte[] localHash = null;
-
-                // Calculate local SHA1
-                using (FileStream fs = new FileStream(filePath, FileMode.Open))
-                using (BufferedStream bs = new BufferedStream(fs))
-                {
-                    using (SHA1Managed sha1 = new SHA1Managed())
-                    {
-                        localHash = sha1.ComputeHash(bs);
-                    }
-                }
-
-                return !localHash.SequenceEqual(file.FileHash);
-            }, cancellationToken);
-        }
-
         public async Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
         {
             await DownloadAsync(x =>
@@ -107,6 +83,35 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 fileStream.SetLength((long)x.TotalSize);
 
                 return new FileStreamTarget(fileStream);
+            }, cancellationToken);
+        }
+
+        public async Task DownloadChangesToFolderAsync(string directory, CancellationToken cancellationToken = default)
+            => await DownloadChangesToFolderAsync(directory, x => true, cancellationToken);
+
+        public async Task DownloadChangesToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
+        {
+            await DownloadToFolderAsync(directory, file =>
+            {
+                if (!condition.Invoke(file)) return false;
+
+                var filePath = Path.Combine(directory, file.FileName);
+
+                if (!File.Exists(filePath)) return true;
+
+                byte[] localHash = null;
+
+                // Calculate local SHA1
+                using (FileStream fs = new FileStream(filePath, FileMode.Open))
+                using (BufferedStream bs = new BufferedStream(fs))
+                {
+                    using (SHA1Managed sha1 = new SHA1Managed())
+                    {
+                        localHash = sha1.ComputeHash(bs);
+                    }
+                }
+
+                return !localHash.SequenceEqual(file.FileHash);
             }, cancellationToken);
         }
 

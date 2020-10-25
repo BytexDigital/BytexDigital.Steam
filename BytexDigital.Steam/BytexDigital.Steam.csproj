@@ -2,11 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Version>0.7.42-beta</Version>
+    <Version>0.7.43-beta</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Copyright>Bytex Digital UG (haftungsbeschränkt)</Copyright>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+    <RepositoryUrl>https://github.com/BytexDigital/BytexDigital.Steam.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <Description>Wrapper library for SteamKit2 for (incomplete) easier access to certain APIs.</Description>
     <Company>Bytex Digital UG (haftungsbeschränkt)</Company>
   </PropertyGroup>

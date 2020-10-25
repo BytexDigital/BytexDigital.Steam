@@ -8,7 +8,9 @@ namespace BytexDigital.Steam.ContentDelivery.Exceptions
     {
         public SteamLogonException(EResult result) : base($"Error code: {result}")
         {
-
+            Result = result;
         }
+
+        public EResult Result { get; }
     }
 }
