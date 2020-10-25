@@ -1,4 +1,5 @@
 ﻿using BytexDigital.Steam.ContentDelivery;
+using BytexDigital.Steam.ContentDelivery.Models.Downloading;
 using BytexDigital.Steam.Core;
 using BytexDigital.Steam.Core.Enumerations;
 
@@ -52,7 +53,18 @@ namespace BytexDigital.Steam.TestClient
                 var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2242952694);
 
                 Console.WriteLine("Starting download");
-                var downloadTask = downloadHandler.DownloadToFolderAsync(@".\download");
+                Task downloadTask = null;
+
+                if (downloadHandler is MultipleFilesHandler multipleFilesHandler)
+                {
+                    // Download with supported diff checking
+                    downloadTask = multipleFilesHandler.DownloadChangesToFolderAsync(@".\download");
+                }
+                else
+                {
+                    // Download without diff checking
+                    downloadTask = downloadHandler.DownloadToFolderAsync(@".\download");
+                }
 
                 while (!downloadTask.IsCompleted)
                 {

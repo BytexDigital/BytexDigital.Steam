@@ -11,6 +11,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         int TotalFileCount { get; }
         ulong TotalFileSize { get; }
         double BufferUsage { get; }
+
         Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default);
         Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default);
     }
