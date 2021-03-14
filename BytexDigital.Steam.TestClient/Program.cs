@@ -18,18 +18,18 @@ namespace BytexDigital.Steam.TestClient
                 return;
             }
 
-            SteamCredentials steamCredentials = null;
+            SteamCredentials steamCredentials = SteamCredentials.Anonymous;
 
-            if (args.Length == 2)
-            {
-                steamCredentials = new SteamCredentials(args[0], args[1]);
-            }
-            else
-            {
-                steamCredentials = new SteamCredentials(args[0], args[1], args[2]);
-            }
+            //if (args.Length == 2)
+            //{
+            //    steamCredentials = new SteamCredentials(args[0], args[1]);
+            //}
+            //else
+            //{
+            //    steamCredentials = new SteamCredentials(args[0], args[1], args[2]);
+            //}
 
-            SteamClient steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
+            SteamClient steamClient = new SteamClient(SteamCredentials.Anonymous, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
             SteamContentClient steamContentClient = new SteamContentClient(steamClient);
 
             try
@@ -46,11 +46,11 @@ namespace BytexDigital.Steam.TestClient
 
             try
             {
-                var depots = await steamContentClient.GetDepotsAsync(107410);
-                var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
+                //var depots = await steamContentClient.GetDepotsAsync(107410);
+                //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
-                //var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 107411, null, "public", null, SteamOs.Windows);
-                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2242952694);
+                var downloadHandler = await steamContentClient.GetAppDataAsync(440, 232251, null, "public", null, SteamOs.Windows);
+                //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2311264557);
 
                 Console.WriteLine("Starting download");
                 Task downloadTask = null;

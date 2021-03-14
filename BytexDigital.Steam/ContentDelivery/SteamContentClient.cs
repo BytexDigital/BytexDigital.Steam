@@ -395,7 +395,7 @@ namespace BytexDigital.Steam.ContentDelivery
         internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
 #nullable disable
         {
-            if (!await GetHasAccessAsync(appId))
+            if (!await GetHasAccessAsync(appId, depotId))
             {
                 bool gotFreeLicense = await GetFreeLicenseAsync(appId);
 
@@ -459,7 +459,7 @@ namespace BytexDigital.Steam.ContentDelivery
             return result.Results.First().Packages.Select(x => x.Value).ToList();
         }
 
-        internal async Task<bool> GetHasAccessAsync(AppId appId)
+        internal async Task<bool> GetHasAccessAsync(AppId? appId, DepotId? depotId)
         {
             IEnumerable<uint> query = null;
 
@@ -476,14 +476,20 @@ namespace BytexDigital.Steam.ContentDelivery
 
             foreach (var packageInfo in packageInfos)
             {
-                if (packageInfo.KeyValues["appids"].Children.Any(x => x.AsUnsignedInteger() == appId))
+                if (appId.HasValue)
                 {
-                    return true;
+                    if (packageInfo.KeyValues["appids"].Children.Any(x => x.AsUnsignedInteger() == appId.Value))
+                    {
+                        return true;
+                    }
                 }
 
-                if (packageInfo.KeyValues["depotids"].Children.Any(x => x.AsUnsignedInteger() == appId))
+                if (depotId.HasValue)
                 {
-                    return true;
+                    if (packageInfo.KeyValues["depotids"].Children.Any(x => x.AsUnsignedInteger() == depotId.Value))
+                    {
+                        return true;
+                    }
                 }
             }
 
