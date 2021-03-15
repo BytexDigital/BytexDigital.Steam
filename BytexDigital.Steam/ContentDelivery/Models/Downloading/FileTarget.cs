@@ -13,5 +13,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public abstract Task WriteAsync(ulong offset, byte[] data);
         public abstract Task CompleteAsync();
+        public abstract Task CancelAsync();
     }
 }

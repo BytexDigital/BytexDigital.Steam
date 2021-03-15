@@ -1,9 +1,13 @@
-﻿using BytexDigital.Steam.ContentDelivery.Models;
+﻿
+using BytexDigital.Steam.ContentDelivery.Exceptions;
+using BytexDigital.Steam.Core.Structs;
 
 using Nito.AsyncEx;
 
 using SteamKit2;
 
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -11,71 +15,179 @@ using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery
 {
-    public class SteamCdnServerPool
+    public class SteamCdnServerPool : IDisposable
     {
-        private SteamApps _steamApps;
-        private SteamContentClient _steamContentClient;
-        private SteamContentServerQualityProvider _steamContentServerQualityProvider;
-        private IList<SteamContentServerQuality> _steamContentServerQualities;
-        private Dictionary<SteamCdnClient, int> _cdnClients = new Dictionary<SteamCdnClient, int>();
+        private readonly SteamContentClient _steamContentClient;
+        private readonly AppId _appId;
+        private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly BlockingCollection<CDNClient.Server> _availableServerEndpoints;
+        private readonly ConcurrentStack<CDNClient.Server> _activeServerEndpoints;
+        private readonly AutoResetEvent _populatePoolEvent;
+        private readonly AsyncManualResetEvent _populatedEvent;
+        private readonly Task _populatorTask;
+        private const int MINIMUM_POOL_SIZE = 10;
 
-        private readonly AsyncSemaphore _getClientSemaphore = new AsyncSemaphore(1);
+        public CDNClient CdnClient { get; private set; }
+        public CDNClient.Server DesignatedProxyServer { get; private set; }
+        public bool IsExhausted { get; private set; }
 
-        public SteamCdnServerPool(SteamContentClient steamContentClient, SteamContentServerQualityProvider steamContentServerQualityProvider)
+        public SteamCdnServerPool(SteamContentClient steamContentClient, AppId appId, CancellationToken cancellationToken = default)
         {
-            _steamApps = steamContentClient.SteamClient.InternalClient.GetHandler<SteamKit2.SteamApps>();
             _steamContentClient = steamContentClient;
-            _steamContentServerQualityProvider = steamContentServerQualityProvider;
+            _appId = appId;
+            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, new CancellationTokenSource().Token);
+            _availableServerEndpoints = new BlockingCollection<CDNClient.Server>();
+            _activeServerEndpoints = new ConcurrentStack<CDNClient.Server>();
+            _populatePoolEvent = new AutoResetEvent(true);
+            _populatedEvent = new AsyncManualResetEvent(false);
+            _populatorTask = Task.Factory.StartNew(MonitorAsync).Unwrap();
 
-            _steamContentServerQualities = _steamContentServerQualityProvider.Load() ?? new List<SteamContentServerQuality>();
+            CdnClient = new CDNClient(_steamContentClient.SteamClient.InternalClient);
         }
 
-        public async Task<SteamCdnClient> GetClientAsync(CancellationToken cancellationToken = default)
+        public async Task<CDNClient.Server> GetServerAsync(CancellationToken cancellationToken = default)
         {
-            await _getClientSemaphore.WaitAsync(cancellationToken);
-
-            if (_cdnClients.Count == 0)
+            if (!_activeServerEndpoints.TryPop(out var server))
             {
-                await FillPoolAsync();
+                if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
+                {
+                    _populatePoolEvent.Set();
+
+                    await _populatedEvent.WaitAsync(cancellationToken);
+                }
+
+                if (IsExhausted) throw new SteamNoContentServerFoundException(_appId);
+
+                server = _availableServerEndpoints.Take(cancellationToken);
             }
 
-            // Select client that has been handed out the least yet
-            var cdnClient = _cdnClients
-                .OrderBy(x => x.Key.Errors)
-                .ThenBy(x => x.Value)
-                .First()
-                .Key;
-
-            _cdnClients[cdnClient]++;
-
-            _getClientSemaphore.Release();
-
-            return cdnClient;
+            return server;
         }
 
-        public void NotifyClientError(SteamCdnClient steamCdnClient)
+        public void ReturnServer(CDNClient.Server server, bool isFaulty)
         {
-            lock (steamCdnClient)
+            if (isFaulty) return;
+
+            _activeServerEndpoints.Push(server);
+        }
+
+        public async Task<string> AuthenticateWithServerAsync(DepotId depotId, CDNClient.Server server)
+        {
+            string host = server.Host;
+
+            if (host.EndsWith(".steampipe.steamcontent.com"))
             {
-                steamCdnClient.Errors++;
+                host = "steampipe.steamcontent.com";
+            }
+            else if (host.EndsWith(".steamcontent.com"))
+            {
+                host = "steamcontent.com";
+            }
+
+            string cdnKey = $"{depotId.Id:D}:{host}";
+
+            return await GetCdnAuthenticationTokenAsync(_appId, depotId, host, cdnKey);
+        }
+
+        private async Task<string> GetCdnAuthenticationTokenAsync(AppId appId, DepotId depotId, string host, string cdnKey)
+        {
+            if (_steamContentClient.CdnAuthenticationTokens.TryGetValue(cdnKey, out var response))
+            {
+                return response.Token;
+            }
+
+            var authResponse = await _steamContentClient.SteamApps.GetCDNAuthToken(appId, depotId, host);
+
+            _steamContentClient.CdnAuthenticationTokens.AddOrUpdate(cdnKey, authResponse, (key, existingValue) => authResponse);
+
+            return authResponse.Token;
+        }
+
+        private async Task MonitorAsync()
+        {
+            while (!_cancellationTokenSource.IsCancellationRequested)
+            {
+                _populatePoolEvent.WaitOne(TimeSpan.FromSeconds(5));
+
+                if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
+                {
+                    _populatedEvent.Reset();
+
+                    var servers = await GetServerListAsync();
+
+                    if (servers.Count == 0)
+                    {
+                        IsExhausted = true;
+                        _populatedEvent.Set();
+                        _cancellationTokenSource.Cancel();
+
+                        return;
+                    }
+
+                    DesignatedProxyServer = servers.FirstOrDefault(x => x.UseAsProxy);
+
+                    var sortedServers = servers
+                        // Filter out servers that aren't relevant to us or our appid
+                        .Where(server =>
+                        {
+                            var isContentServer = server.Type == "SteamCache" || server.Type == "CDN";
+                            var allowsAppId = server.AllowedAppIds == null || server.AllowedAppIds.Contains(_appId);
+
+                            return isContentServer && allowsAppId;
+                        })
+                        .OrderBy(x => x.WeightedLoad);
+
+                    foreach (var server in sortedServers)
+                    {
+                        _availableServerEndpoints.Add(server);
+                    }
+
+                    _populatedEvent.Set();
+                }
             }
         }
 
-        public async Task FillPoolAsync()
+        private async Task<IReadOnlyCollection<CDNClient.Server>> GetServerListAsync()
         {
-            // Await until we've logged in and have our suggest cell ID
-            await _steamContentClient.SteamClient.AwaitReadyAsync(_steamContentClient.SteamClient.CancellationToken);
+            int throttleDelay = 0;
 
-            // Get servers
-            var servers = await SteamKit2.ContentServerDirectoryService.LoadAsync(
-                _steamContentClient.SteamClient.InternalClient.Configuration,
-                (int)_steamContentClient.SteamClient.SuggestedCellId,
-                _steamContentClient.CancellationToken);
-
-            foreach (var server in servers)
+            while (!_cancellationTokenSource.IsCancellationRequested)
             {
-                _cdnClients.Add(new SteamCdnClient(_steamContentClient, new SteamCdnServer(server)), 0);
+                await Task.Delay(TimeSpan.FromSeconds(1), _cancellationTokenSource.Token);
+
+                try
+                {
+                    var cdnServers = await ContentServerDirectoryService.LoadAsync(
+                        _steamContentClient.SteamClient.InternalClient.Configuration,
+                        (int)_steamContentClient.SteamClient.SuggestedCellId,
+                        _cancellationTokenSource.Token);
+
+                    if (cdnServers == null) continue;
+
+                    return cdnServers;
+                }
+                catch (Exception ex)
+                {
+                    if (ex is SteamKitWebRequestException requestEx && requestEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    {
+                        throttleDelay += 5;
+
+                        await Task.Delay(TimeSpan.FromSeconds(throttleDelay), _cancellationTokenSource.Token);
+                    }
+                }
             }
+
+            return new List<CDNClient.Server>();
+        }
+
+        public void Close()
+        {
+            _cancellationTokenSource.Cancel();
+        }
+
+        public void Dispose()
+        {
+            Close();
         }
     }
 }
