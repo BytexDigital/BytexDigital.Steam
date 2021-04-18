@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public interface IDownloadHandler
+    public interface IDownloadHandler : IAsyncDisposable, IDisposable
     {
         bool IsRunning { get; }
         double TotalProgress { get; }

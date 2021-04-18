@@ -51,6 +51,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         internal AsyncAutoResetEvent _eventHandlerCompleted = new AsyncAutoResetEvent(true);
 
         private readonly ConcurrentDictionary<ManifestFile, FileTarget> _fileTargets = new ConcurrentDictionary<ManifestFile, FileTarget>();
+        private readonly ConcurrentBag<FileWriter> _fileWriters = new ConcurrentBag<FileWriter>();
         private CancellationTokenSource _cancellationTokenSource;
         private SteamCdnServerPool _serverPool;
 
@@ -74,16 +75,14 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         {
             if (IsRunning) throw new InvalidOperationException("Download task was already started.");
 
-            var fileWriters = new List<FileWriter>();
-
             try
             {
                 IsRunning = true;
 
-                _serverPool = new SteamCdnServerPool(_steamContentClient, AppId, cancellationToken);
-
                 // Create cancellation token source
                 _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _steamContentClient.CancellationToken);
+
+                _serverPool = new SteamCdnServerPool(_steamContentClient, AppId, _cancellationTokenSource.Token);
 
                 var chunks = new ConcurrentBag<ChunkJob>();
 
@@ -149,7 +148,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
             finally
             {
-                foreach (var fileWriter in fileWriters.Where(x => !x.IsDone))
+                foreach (var fileWriter in _fileWriters)
                 {
                     await fileWriter.CancelAsync();
                 }
@@ -174,7 +173,13 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             do
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                // If we were cancelled, we should wait for all tasks to finish
+                if (cancellationToken.IsCancellationRequested && tasksRunning.Count > 0)
+                {
+                    await Task.WhenAll(tasksRunning);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
 
                 while (tasksRunning.Count < maxParallel && taskFactoriesQueue.Count > 0)
                 {
@@ -242,6 +247,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             target.WrittenBytes = 0;
 
             var fileWriter = new FileWriter(this, file, target, file.TotalSize);
+
+            _fileWriters.Add(fileWriter);
 
             foreach (var chunk in file.ChunkHeaders)
             {
@@ -318,7 +325,21 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             });
         }
 
-        internal class FileWriter
+        public async ValueTask DisposeAsync()
+        {
+            // Dispose all file writers to release potential file streams
+            foreach (var writers in _fileWriters) try { await writers.DisposeAsync(); } catch { };
+
+            // Dispose the server pool
+            try { _serverPool?.Dispose(); } catch { }
+        }
+
+        public void Dispose()
+        {
+            DisposeAsync().GetAwaiter().GetResult();
+        }
+
+        internal class FileWriter : IAsyncDisposable
         {
             public ulong WrittenBytes { get; private set; }
             public ulong ExpectedBytes { get; private set; }
@@ -327,7 +348,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             public bool IsDone { get; private set; }
 
             private AsyncSemaphore _writeLock = new AsyncSemaphore(1);
-            private readonly MultipleFilesHandler _handler;
+            private MultipleFilesHandler _handler;
 
             public FileWriter(MultipleFilesHandler handler, ManifestFile manifestFile, FileTarget target, ulong expectedBytes)
             {
@@ -361,14 +382,24 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             public async Task CancelAsync()
             {
-                using (var semLock = await _writeLock.LockAsync().ConfigureAwait(false))
+                try
                 {
-                    if (IsDone) return;
-
-                    await Target.CancelAsync().ConfigureAwait(false);
-
-                    IsDone = true;
+                    using (var semLock = await _writeLock.LockAsync().ConfigureAwait(false))
+                    {
+                        await Target.CancelAsync().ConfigureAwait(false);
+                        IsDone = true;
+                    }
                 }
+                catch
+                {
+                }
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                await CancelAsync();
+
+                _handler = null;
             }
         }
 

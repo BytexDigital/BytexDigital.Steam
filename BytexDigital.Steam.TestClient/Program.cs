@@ -50,7 +50,7 @@ namespace BytexDigital.Steam.TestClient
                 var depots = await steamContentClient.GetDepotsAsync(107410);
                 //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
-                var downloadHandler = await steamContentClient.GetAppDataAsync(232250, 232250, null, "public", null, SteamOs.Windows);
+                await using var downloadHandler = await steamContentClient.GetAppDataAsync(232250, 232250, null, "public", null, SteamOs.Windows);
                 //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2311264557);
 
                 Console.WriteLine("Starting download");
@@ -60,7 +60,7 @@ namespace BytexDigital.Steam.TestClient
                 downloadHandler.VerificationCompleted += (sender, args) => Console.WriteLine($"Verification completed, {args.QueuedFiles.Count} files queued for download");
                 downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
-                await downloadHandler.DownloadToFolderAsync(@".\download");
+                await downloadHandler.DownloadToFolderAsync(@".\download", new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token);
             }
             catch (Exception ex)
             {

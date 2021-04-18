@@ -26,8 +26,16 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public override async Task CancelAsync()
         {
-            await FileStream.FlushAsync().ConfigureAwait(false);
-            FileStream.Close();
+            try
+            {
+                await FileStream.FlushAsync().ConfigureAwait(false);
+                FileStream.Close();
+            }
+            catch
+            {
+            }
         }
+
+        public override async ValueTask DisposeAsync() => await CancelAsync();
     }
 }

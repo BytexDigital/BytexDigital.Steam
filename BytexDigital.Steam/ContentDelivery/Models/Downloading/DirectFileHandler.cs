@@ -65,5 +65,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             TotalFileSize = (ulong)e.TotalBytesToReceive;
             TotalProgress = (double)e.ProgressPercentage / 100;
         }
+
+        public ValueTask DisposeAsync()
+        {
+            return new ValueTask(Task.CompletedTask);
+        }
+
+        public void Dispose()
+        {
+            DisposeAsync().GetAwaiter().GetResult();
+        }
     }
 }
