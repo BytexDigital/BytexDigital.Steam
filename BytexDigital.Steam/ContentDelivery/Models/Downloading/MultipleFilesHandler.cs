@@ -54,6 +54,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         private readonly ConcurrentBag<FileWriter> _fileWriters = new ConcurrentBag<FileWriter>();
         private CancellationTokenSource _cancellationTokenSource;
         private SteamCdnServerPool _serverPool;
+        private bool _wasUsed = false;
 
         public MultipleFilesHandler(SteamContentClient steamContentClient, Manifest manifest, AppId appId, DepotId depotId, ManifestId manifestId)
         {
@@ -73,11 +74,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public async Task DownloadAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
         {
-            if (IsRunning) throw new InvalidOperationException("Download task was already started.");
+            if (IsRunning || _wasUsed) throw new InvalidOperationException("Download task was already started or cannot be reused.");
 
             try
             {
                 IsRunning = true;
+                _wasUsed = true;
 
                 // Create cancellation token source
                 _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _steamContentClient.CancellationToken);
@@ -148,13 +150,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
             finally
             {
-                foreach (var fileWriter in _fileWriters)
-                {
-                    await fileWriter.CancelAsync();
-                }
+                await Task.WhenAll(_fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask())));
+                _serverPool?.Close();
 
                 IsRunning = false;
-                _serverPool?.Close();
             }
         }
 
@@ -275,7 +274,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         private async Task DownloadChunkAsync(ChunkJob chunkJob, CancellationToken cancellationToken)
         {
-            var server = await _serverPool.GetServerAsync().ConfigureAwait(false);
+            var server = await _serverPool.GetServerAsync(cancellationToken).ConfigureAwait(false);
             var token = await _serverPool.AuthenticateWithServerAsync(DepotId, server).ConfigureAwait(false);
 
             CDNClient.DepotChunk chunkData = default;
@@ -328,7 +327,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public async ValueTask DisposeAsync()
         {
             // Dispose all file writers to release potential file streams
-            foreach (var writers in _fileWriters) try { await writers.DisposeAsync(); } catch { };
+            await Task.WhenAll(_fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask())));
 
             // Dispose the server pool
             try { _serverPool?.Dispose(); } catch { }
@@ -382,11 +381,17 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             public async Task CancelAsync()
             {
+                int a = new Random().Next(0, 1000);
+
                 try
                 {
+                    Console.WriteLine($"{a} Cancel requested on handler");
                     using (var semLock = await _writeLock.LockAsync().ConfigureAwait(false))
                     {
+                        Console.WriteLine($"{a} Aquired lock, cancelling target");
                         await Target.CancelAsync().ConfigureAwait(false);
+                        Console.WriteLine($"{a} Cancelled target");
+
                         IsDone = true;
                     }
                 }
