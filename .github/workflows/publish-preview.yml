@@ -20,7 +20,7 @@ jobs:
         run: dotnet build -c Release
 
       - name: Pack project
-        run: dotnet pack --include-symbols -p:SymbolPackageFormat=snupkg --version-suffix "$preview.$(date +%s)" --no-build -c Release -o .
+        run: dotnet pack --include-symbols -p:SymbolPackageFormat=snupkg --version-suffix "preview.$(date +%s)" --no-build -c Release -o .
 
       - name: Push project
         run: dotnet nuget push **/*.nupkg -k ${{secrets.NUGET_API_KEY}} --skip-duplicate
