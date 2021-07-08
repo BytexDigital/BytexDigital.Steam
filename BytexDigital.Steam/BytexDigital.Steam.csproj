@@ -2,7 +2,11 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Version>0.8.0-alpha2</Version>
+
+    <VersionSuffix>$(VersionSuffix)</VersionSuffix>
+    <Version>0.8.1</Version>
+    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Copyright>Bytex Digital UG (haftungsbeschränkt)</Copyright>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>

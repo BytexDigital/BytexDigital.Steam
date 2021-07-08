@@ -148,6 +148,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     RunEventHandler(() => DownloadComplete.Invoke(this, new EventArgs()));
                 }
             }
+            catch (Exception ex)
+            {
+                throw;
+            }
             finally
             {
                 await Task.WhenAll(_fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask())));
@@ -385,12 +389,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                 try
                 {
-                    Console.WriteLine($"{a} Cancel requested on handler");
                     using (var semLock = await _writeLock.LockAsync().ConfigureAwait(false))
                     {
-                        Console.WriteLine($"{a} Aquired lock, cancelling target");
                         await Target.CancelAsync().ConfigureAwait(false);
-                        Console.WriteLine($"{a} Cancelled target");
 
                         IsDone = true;
                     }

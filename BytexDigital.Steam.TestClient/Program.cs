@@ -21,16 +21,16 @@ namespace BytexDigital.Steam.TestClient
 
             SteamCredentials steamCredentials = SteamCredentials.Anonymous;
 
-            //if (args.Length == 2)
-            //{
-            //    steamCredentials = new SteamCredentials(args[0], args[1]);
-            //}
-            //else
-            //{
-            //    steamCredentials = new SteamCredentials(args[0], args[1], args[2]);
-            //}
+            if (args.Length == 2)
+            {
+                steamCredentials = new SteamCredentials(args[0], args[1]);
+            }
+            else
+            {
+                steamCredentials = new SteamCredentials(args[0], args[1], args[2]);
+            }
 
-            SteamClient steamClient = new SteamClient(SteamCredentials.Anonymous, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
+            SteamClient steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
             SteamContentClient steamContentClient = new SteamContentClient(steamClient, 10);
 
             try
@@ -47,11 +47,11 @@ namespace BytexDigital.Steam.TestClient
 
             try
             {
-                var depots = await steamContentClient.GetDepotsAsync(107410);
+                //var depots = await steamContentClient.GetDepotsAsync(107410);
                 //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
-                await using var downloadHandler = await steamContentClient.GetAppDataAsync(232250, 232250, null, "public", null, SteamOs.Windows);
-                //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2311264557);
+                //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
+                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2539330136);
 
                 Console.WriteLine("Starting download");
 
@@ -60,7 +60,7 @@ namespace BytexDigital.Steam.TestClient
                 downloadHandler.VerificationCompleted += (sender, args) => Console.WriteLine($"Verification completed, {args.QueuedFiles.Count} files queued for download");
                 downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
-                await downloadHandler.DownloadToFolderAsync(@".\download", new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token);
+                await downloadHandler.DownloadToFolderAsync(@".\download"/*, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token*/);
             }
             catch (Exception ex)
             {
