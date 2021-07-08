@@ -1,11 +1,11 @@
-name: Publish
+name: Publish release
 on:
   push:
     branches:
       - master
 jobs:
   publish:
-    name: Build, pack & publish
+    name: Publish
     runs-on: ubuntu-latest
     steps:
       - name: Setup dotnet tools
