@@ -23,5 +23,19 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             FileStream.Seek((long)offset, SeekOrigin.Begin);
             await FileStream.WriteAsync(data, 0, data.Length).ConfigureAwait(false);
         }
+
+        public override async Task CancelAsync()
+        {
+            try
+            {
+                await FileStream.FlushAsync().ConfigureAwait(false);
+                FileStream.Close();
+            }
+            catch
+            {
+            }
+        }
+
+        public override async ValueTask DisposeAsync() => await CancelAsync();
     }
 }

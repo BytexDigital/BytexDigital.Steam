@@ -2,12 +2,16 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Version>0.7.43-beta</Version>
+
+    <VersionSuffix>$(VersionSuffix)</VersionSuffix>
+    <Version>0.8.1</Version>
+    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Copyright>Bytex Digital UG (haftungsbeschränkt)</Copyright>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
-    <RepositoryUrl>https://github.com/BytexDigital/BytexDigital.Steam.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/BytexDigital/BytexDigital.Steam</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <Description>Wrapper library for SteamKit2 for (incomplete) easier access to certain APIs.</Description>
     <Company>Bytex Digital UG (haftungsbeschränkt)</Company>
@@ -16,7 +20,7 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="Nito.AsyncEx" Version="5.0.0" />
-    <PackageReference Include="SteamKit2" Version="2.3.0-Beta.1" />
+    <PackageReference Include="SteamKit2" Version="2.4.0-Alpha.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,9 +1,10 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public abstract class FileTarget
+    public abstract class FileTarget : IAsyncDisposable
     {
         public static FileTarget None = null;
 
@@ -13,5 +14,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public abstract Task WriteAsync(ulong offset, byte[] data);
         public abstract Task CompleteAsync();
+        public abstract Task CancelAsync();
+
+        public abstract ValueTask DisposeAsync();
     }
 }

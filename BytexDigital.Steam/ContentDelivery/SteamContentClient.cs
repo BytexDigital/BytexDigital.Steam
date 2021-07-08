@@ -8,7 +8,6 @@ using BytexDigital.Steam.Extensions;
 
 using SteamKit2;
 using SteamKit2.Internal;
-using SteamKit2.Unified.Internal;
 
 using System;
 using System.Collections.Concurrent;
@@ -31,29 +30,20 @@ namespace BytexDigital.Steam.ContentDelivery
         internal SteamUser SteamUser { get; }
         internal SteamApps SteamApps { get; }
         internal SteamUnifiedMessages SteamUnifiedMessagesService { get; }
-        internal SteamCdnServerPool SteamCdnServerPool { get; }
+        internal ConcurrentDictionary<string, SteamApps.CDNAuthTokenCallback> CdnAuthenticationTokens { get; }
         internal int MaxConcurrentDownloadsPerTask { get; }
-        internal ulong ChunkBufferSize { get; }
-        internal double BufferUsageThreshold { get; }
 
         private readonly ConcurrentDictionary<AppId, ulong> _productAccessKeys = new ConcurrentDictionary<AppId, ulong>();
+        private readonly ConcurrentDictionary<DepotId, byte[]> _depotKeys = new ConcurrentDictionary<DepotId, byte[]>();
         private readonly CancellationTokenSource _cancellationTokenSource;
-        private readonly SteamContentServerQualityProvider _steamContentServerQualityProvider;
 
-        public SteamContentClient(Core.SteamClient steamClient,
-                                  SteamContentServerQualityProvider steamContentServerQualityProvider = null,
-                                  int maxConcurrentDownloadsPerTask = 10,
-                                  ulong chunkBufferSize = 3221225472,
-                                  double bufferUsageThreshold = 1)
+        public SteamContentClient(Core.SteamClient steamClient, int maxConcurrentDownloadsPerTask = 10)
         {
             SteamClient = steamClient;
-            _steamContentServerQualityProvider = steamContentServerQualityProvider ?? new SteamContentServerQualityNoMemoryProvider();
             SteamUnifiedMessagesService = SteamClient.InternalClient.GetHandler<SteamKit.SteamUnifiedMessages>();
-            PublishedFileService = SteamUnifiedMessagesService.CreateService<SteamKit.Unified.Internal.IPublishedFile>();
-            SteamCdnServerPool = new SteamCdnServerPool(this, _steamContentServerQualityProvider);
+            PublishedFileService = SteamUnifiedMessagesService.CreateService<IPublishedFile>();
+            CdnAuthenticationTokens = new ConcurrentDictionary<string, SteamApps.CDNAuthTokenCallback>();
             MaxConcurrentDownloadsPerTask = maxConcurrentDownloadsPerTask;
-            ChunkBufferSize = chunkBufferSize;
-            BufferUsageThreshold = bufferUsageThreshold;
             SteamApps = SteamClient.InternalClient.GetHandler<SteamKit.SteamApps>();
             SteamUser = SteamClient.InternalClient.GetHandler<SteamKit.SteamUser>();
 
@@ -64,43 +54,61 @@ namespace BytexDigital.Steam.ContentDelivery
         {
             await SteamClient.AwaitReadyAsync(cancellationToken);
 
-            Exception lastEx = null;
+            var pool = new SteamCdnServerPool(this, appId);
 
-            for (int i = 0; i < 30; i++)
+            try
             {
-                SteamCdnClient steamCdnClient;
+                var server = await pool.GetServerAsync(cancellationToken);
+                var depotKey = await GetDepotKeyAsync(depotId, appId);
+                var cdnKey = await pool.AuthenticateWithServerAsync(depotId, server);
+                var manifest = await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, server, cdnKey, depotKey, proxyServer: null);
 
-                try
+
+                if (manifest.FilenamesEncrypted)
                 {
-                    steamCdnClient = await SteamCdnServerPool.GetClientAsync();
-
-                    //await cdnClientWrapper.CdnClient.AuthenticateDepotAsync(depotId);
-
-                    var manifest = await steamCdnClient.DownloadManifestAsync(appId, depotId, manifestId);
-
-                    if (manifest.FilenamesEncrypted)
-                    {
-                        var depotKey = await steamCdnClient.GetDepotKeyAsync(depotId, appId);
-                        manifest.DecryptFilenames(depotKey);
-                    }
-
-                    return manifest;
+                    manifest.DecryptFilenames(depotKey);
                 }
-                catch (SteamDepotAccessDeniedException)
-                {
-                    throw;
-                }
-                catch (HttpRequestException ex)
-                {
-                    lastEx = ex;
-                }
-                catch (Exception ex)
-                {
-                    lastEx = ex;
-                }
+
+                pool.ReturnServer(server, isFaulty: false);
+
+                return manifest;
+            }
+            catch (SteamDepotAccessDeniedException)
+            {
+                throw;
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SteamManifestDownloadException(ex);
+            }
+            catch (Exception ex)
+            {
+                throw new SteamManifestDownloadException(ex);
+            }
+        }
+
+        public async Task<byte[]> GetDepotKeyAsync(DepotId depotId, AppId appId)
+        {
+            if (_depotKeys.ContainsKey(depotId))
+            {
+                return _depotKeys[depotId];
             }
 
-            throw new SteamManifestDownloadException(lastEx);
+            var result = await SteamApps.GetDepotDecryptionKey(depotId, appId);
+
+            if (result.Result != EResult.OK)
+            {
+                if (result.Result == EResult.AccessDenied)
+                {
+                    throw new SteamDepotAccessDeniedException(depotId);
+                }
+
+                throw new SteamDepotKeyNotRetrievableException(depotId, result.Result);
+            }
+
+            while (!_depotKeys.TryAdd(depotId, result.DepotKey)) { }
+
+            return result.DepotKey;
         }
 
         public async Task<PublishedFileDetails> GetPublishedFileDetailsAsync(PublishedFileId publishedFileId)
@@ -131,7 +139,7 @@ namespace BytexDigital.Steam.ContentDelivery
             {
                 var requestDetails = new CPublishedFile_QueryFiles_Request
                 {
-                    query_type = (uint)EPublishedFileQueryType.RankedByPublicationDate,
+                    query_type = (uint)SteamKit.EPublishedFileQueryType.RankedByPublicationDate,
                     cursor = paginationCursor,
                     creator_appid = appId,
                     appid = appId,
@@ -395,7 +403,7 @@ namespace BytexDigital.Steam.ContentDelivery
         internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
 #nullable disable
         {
-            if (!await GetHasAccessAsync(appId))
+            if (!await GetHasAccessAsync(appId, depotId))
             {
                 bool gotFreeLicense = await GetFreeLicenseAsync(appId);
 
@@ -459,7 +467,7 @@ namespace BytexDigital.Steam.ContentDelivery
             return result.Results.First().Packages.Select(x => x.Value).ToList();
         }
 
-        internal async Task<bool> GetHasAccessAsync(AppId appId)
+        internal async Task<bool> GetHasAccessAsync(AppId? appId, DepotId? depotId)
         {
             IEnumerable<uint> query = null;
 
@@ -476,14 +484,20 @@ namespace BytexDigital.Steam.ContentDelivery
 
             foreach (var packageInfo in packageInfos)
             {
-                if (packageInfo.KeyValues["appids"].Children.Any(x => x.AsUnsignedInteger() == appId))
+                if (appId.HasValue)
                 {
-                    return true;
+                    if (packageInfo.KeyValues["appids"].Children.Any(x => x.AsUnsignedInteger() == appId.Value))
+                    {
+                        return true;
+                    }
                 }
 
-                if (packageInfo.KeyValues["depotids"].Children.Any(x => x.AsUnsignedInteger() == appId))
+                if (depotId.HasValue)
                 {
-                    return true;
+                    if (packageInfo.KeyValues["depotids"].Children.Any(x => x.AsUnsignedInteger() == depotId.Value))
+                    {
+                        return true;
+                    }
                 }
             }
 

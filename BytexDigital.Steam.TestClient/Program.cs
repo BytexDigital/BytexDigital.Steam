@@ -4,6 +4,7 @@ using BytexDigital.Steam.Core;
 using BytexDigital.Steam.Core.Enumerations;
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.TestClient
@@ -12,13 +13,13 @@ namespace BytexDigital.Steam.TestClient
     {
         static async Task Main(string[] args)
         {
-            if (args.Length < 2)
-            {
-                Console.WriteLine("Expected two arguments: username password");
-                return;
-            }
+            //if (args.Length < 2)
+            //{
+            //    Console.WriteLine("Expected two arguments: username password");
+            //    return;
+            //}
 
-            SteamCredentials steamCredentials = null;
+            SteamCredentials steamCredentials = SteamCredentials.Anonymous;
 
             if (args.Length == 2)
             {
@@ -30,7 +31,7 @@ namespace BytexDigital.Steam.TestClient
             }
 
             SteamClient steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
-            SteamContentClient steamContentClient = new SteamContentClient(steamClient);
+            SteamContentClient steamContentClient = new SteamContentClient(steamClient, 10);
 
             try
             {
@@ -46,35 +47,20 @@ namespace BytexDigital.Steam.TestClient
 
             try
             {
-                var depots = await steamContentClient.GetDepotsAsync(107410);
-                var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
+                //var depots = await steamContentClient.GetDepotsAsync(107410);
+                //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
-                //var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 107411, null, "public", null, SteamOs.Windows);
-                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2242952694);
+                //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
+                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2539330136);
 
                 Console.WriteLine("Starting download");
-                Task downloadTask = null;
 
-                if (downloadHandler is MultipleFilesHandler multipleFilesHandler)
-                {
-                    // Download with supported diff checking
-                    downloadTask = multipleFilesHandler.DownloadChangesToFolderAsync(@".\download");
-                }
-                else
-                {
-                    // Download without diff checking
-                    downloadTask = downloadHandler.DownloadToFolderAsync(@".\download");
-                }
+                downloadHandler.FileVerified += (sender, args) => Console.WriteLine($"Verified file {args.ManifestFile.FileName}");
+                downloadHandler.FileDownloaded += (sender, args) => Console.WriteLine($"{downloadHandler.TotalProgress * 100:00.00}% {args.FileName}");
+                downloadHandler.VerificationCompleted += (sender, args) => Console.WriteLine($"Verification completed, {args.QueuedFiles.Count} files queued for download");
+                downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
-                while (!downloadTask.IsCompleted)
-                {
-                    var delayTask = Task.Delay(100);
-                    var t = await Task.WhenAny(delayTask, downloadTask);
-
-                    Console.WriteLine($"Progress {(downloadHandler.TotalProgress * 100).ToString("00.00")}%");
-                }
-
-                await downloadTask;
+                await downloadHandler.DownloadToFolderAsync(@".\download"/*, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token*/);
             }
             catch (Exception ex)
             {

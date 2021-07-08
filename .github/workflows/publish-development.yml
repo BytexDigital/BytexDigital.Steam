@@ -1,9 +1,7 @@
-name: Publish release
+name: Publish development
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
+
 jobs:
   publish:
     name: Publish
@@ -21,7 +19,7 @@ jobs:
         run: dotnet build -c Release
 
       - name: Pack project
-        run: dotnet pack --include-symbols -p:SymbolPackageFormat=snupkg --no-build -c Release -o .
+        run: dotnet pack --include-symbols -p:SymbolPackageFormat=snupkg --version-suffix "$development.$(date +%s)" --no-build -c Release -o .
 
       - name: Push project
-        run: dotnet nuget push **/*.nupkg -k ${{secrets.NUGET_API_KEY}} --skip-duplicate
+        run: dotnet nuget push **/*.nupkg -s ${{secrets.GH_NUGET_FEED_URL}} -k ${{secrets.GITHUB_TOKEN}} --skip-duplicate

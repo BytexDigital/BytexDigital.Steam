@@ -1,12 +1,10 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
-using BytexDigital.Steam.ContentDelivery.Models;
 using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Exceptions;
 
 using Nito.AsyncEx;
 
 using SteamKit2;
-using SteamKit2.Unified.Internal;
 
 using System;
 using System.Collections.Generic;
