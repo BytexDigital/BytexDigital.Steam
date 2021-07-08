@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@master
 
       - name: Build project
-        run: dotnet build -c Release -p:VersionSuffix=development.$(date +%s)
+        run: dotnet build -c Release -p:VersionSuffix=preview.$(date +%s)
 
       - name: Push project
         run: dotnet nuget push **/*.nupkg -k ${{secrets.NUGET_API_KEY}} --skip-duplicate
