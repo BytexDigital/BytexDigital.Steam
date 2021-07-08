@@ -16,10 +16,7 @@ jobs:
         uses: actions/checkout@master
 
       - name: Build project
-        run: dotnet build -c Release
-
-      - name: Pack project
-        run: dotnet pack --include-symbols -p:SymbolPackageFormat=snupkg --version-suffix "development.$(date +%s)" --no-build -c Release -o .
+        run: dotnet build -c Release -p:VersionSuffix=development.$(date +%s)
 
       - name: Push project
         run: dotnet nuget push **/*.nupkg -s ${{secrets.GH_NUGET_FEED_URL}} -k ${{secrets.GITHUB_TOKEN}} --skip-duplicate
