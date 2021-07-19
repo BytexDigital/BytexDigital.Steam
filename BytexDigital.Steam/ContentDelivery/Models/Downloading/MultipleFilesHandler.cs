@@ -219,20 +219,22 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             if (File.Exists(filePath))
             {
-                using FileStream fs = new FileStream(filePath, FileMode.Open);
-
-                // If the files are the same length, verify them using their hash
-                if ((ulong)fs.Length == file.TotalSize)
+                using (FileStream fs = new FileStream(filePath, FileMode.Open))
                 {
-                    using BufferedStream bs = new BufferedStream(fs);
-                    using SHA1Managed sha1 = new SHA1Managed();
 
-                    // If both files are identical, dont download the file
-                    if (sha1.ComputeHash(bs).SequenceEqual(file.FileHash))
+                    // If the files are the same length, verify them using their hash
+                    if ((ulong)fs.Length == file.TotalSize)
                     {
-                        if (FileVerified != null) RunEventHandler(() => FileVerified.Invoke(this, new FileVerifiedArgs(file, false)));
+                        using BufferedStream bs = new BufferedStream(fs);
+                        using SHA1Managed sha1 = new SHA1Managed();
 
-                        return Task.CompletedTask;
+                        // If both files are identical, dont download the file
+                        if (sha1.ComputeHash(bs).SequenceEqual(file.FileHash))
+                        {
+                            if (FileVerified != null) RunEventHandler(() => FileVerified.Invoke(this, new FileVerifiedArgs(file, false)));
+
+                            return Task.CompletedTask;
+                        }
                     }
                 }
 

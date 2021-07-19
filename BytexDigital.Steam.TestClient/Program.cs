@@ -51,7 +51,7 @@ namespace BytexDigital.Steam.TestClient
                 //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
                 //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
-                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2539330136);
+                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2539326714);
 
                 Console.WriteLine("Starting download");
 
