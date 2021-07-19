@@ -94,7 +94,7 @@ namespace BytexDigital.Steam.ContentDelivery
             if (_steamContentClient.CdnAuthenticationTokens.TryGetValue(cdnKey, out var response))
             {
                 // Check if the token has expired
-                if (DateTime.Now - response.Expiration < TimeSpan.FromMinutes(1))
+                if (response.Expiration - DateTime.Now < TimeSpan.FromMinutes(1))
                 {
                     // Remove from our store and just fetch a new auth token
                     _steamContentClient.CdnAuthenticationTokens.TryRemove(cdnKey, out _);
