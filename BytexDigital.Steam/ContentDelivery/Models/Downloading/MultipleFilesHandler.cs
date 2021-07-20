@@ -184,6 +184,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                     // Save the taskfactory that produced this task in case the task failed and we want to reattempt it
                     tasksFactoryLookup.Add(task, taskFactory);
+                    tasksRunning.Add(task);
                 }
 
                 Task completedTask = await Task.WhenAny(tasksRunning).ConfigureAwait(false);
