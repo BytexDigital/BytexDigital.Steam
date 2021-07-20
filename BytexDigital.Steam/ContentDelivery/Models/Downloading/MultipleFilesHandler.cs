@@ -98,7 +98,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                 await ParallelAsync(
                     _steamContentClient.MaxConcurrentDownloadsPerTask,
-                    new Queue<Func<Task>>(verificationTaskFactories),
+                    verificationTaskFactories,
                     (factory, task) => throw task.Exception,
                     _cancellationTokenSource.Token);
 
@@ -119,7 +119,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     .OrderBy(x => x.Key)
                     .SelectMany(x => x);
 
-                var taskFactoriesQueue = new Queue<Func<Task>>(sortedChunks.Select(chunkJob => new Func<Task>(async () => await Task.Run(() => DownloadChunkAsync(chunkJob, cancellationToken)))));
+                var taskFactoriesQueue = sortedChunks.Select(chunkJob => new Func<Task>(async () => await Task.Run(() => DownloadChunkAsync(chunkJob, cancellationToken)))).ToList();
                 var tasksFactoryFailuresLookup = new ConcurrentDictionary<Func<Task>, int>();
 
                 await ParallelAsync(
@@ -133,8 +133,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                         {
                             throw new SteamDownloadException(task.Exception);
                         }
-
-                        taskFactoriesQueue.Enqueue(factory);
                     },
                     _cancellationTokenSource.Token);
 
@@ -169,45 +167,42 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        private async Task ParallelAsync(int maxParallel, Queue<Func<Task>> taskFactoriesQueue, Action<Func<Task>, Task> faultedTaskAction, CancellationToken cancellationToken)
+        private async Task ParallelAsync(int maxParallel, IEnumerable<Func<Task>> taskFactories, Action<Func<Task>, Task> faultedTaskAction, CancellationToken cancellationToken)
         {
-            var tasksRunning = new List<Task>(maxParallel);
+            var tasksRunning = new List<Task>();
             var tasksFactoryLookup = new Dictionary<Task, Func<Task>>();
+            var tasksFactoriesQueue = new Queue<Func<Task>>(taskFactories);
 
-            do
+            while (tasksRunning.Count > 0 || tasksFactoriesQueue.Count > 0)
             {
-                // If we were cancelled, we should wait for all tasks to finish
-                if (cancellationToken.IsCancellationRequested && tasksRunning.Count > 0)
-                {
-                    await Task.WhenAll(tasksRunning);
+                cancellationToken.ThrowIfCancellationRequested();
 
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-
-                while (tasksRunning.Count < maxParallel && taskFactoriesQueue.Count > 0)
+                while (tasksRunning.Count < maxParallel && tasksFactoriesQueue.Count > 0)
                 {
-                    var taskFactory = taskFactoriesQueue.Dequeue();
+                    var taskFactory = tasksFactoriesQueue.Dequeue();
                     var task = taskFactory();
 
+                    // Save the taskfactory that produced this task in case the task failed and we want to reattempt it
                     tasksFactoryLookup.Add(task, taskFactory);
-                    tasksRunning.Add(task);
                 }
-
-                if (tasksRunning.Count == 0) continue;
 
                 Task completedTask = await Task.WhenAny(tasksRunning).ConfigureAwait(false);
 
                 if (completedTask.IsFaulted)
                 {
+                    // Reattempt the faulted task by putting it back into the queue at the end of it
                     var taskFactory = tasksFactoryLookup[completedTask];
 
+                    // Do something the caller wants us to do (e.g. enforce a max policy on retries or something)
                     faultedTaskAction?.Invoke(taskFactory, completedTask);
+
+                    // Reattempt
+                    tasksFactoryLookup.Remove(completedTask);
+                    tasksFactoriesQueue.Enqueue(taskFactory);
                 }
 
                 tasksRunning.Remove(completedTask);
-            } while (taskFactoriesQueue.Count > 0);
-
-            if (tasksRunning.Count > 0) await Task.WhenAll(tasksRunning);
+            }
         }
 
         private Task VerifyFileAsync(ManifestFile file, string directory, ConcurrentBag<ChunkJob> chunks)
