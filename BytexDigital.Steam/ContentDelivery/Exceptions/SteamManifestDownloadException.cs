@@ -7,5 +7,9 @@ namespace BytexDigital.Steam.ContentDelivery.Exceptions
         public SteamManifestDownloadException(Exception innerException) : base($"Could not download the manifest file. View the inner exception for more information.", innerException)
         {
         }
+
+        public SteamManifestDownloadException(string message) : base(message)
+        {
+        }
     }
 }

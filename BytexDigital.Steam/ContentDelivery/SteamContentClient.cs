@@ -13,7 +13,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -56,35 +55,57 @@ namespace BytexDigital.Steam.ContentDelivery
 
             var pool = new SteamCdnServerPool(this, appId);
 
-            try
+            int attempts = 0;
+            const int maxAttempts = 10;
+
+            while (attempts < maxAttempts && !cancellationToken.IsCancellationRequested)
             {
-                var server = await pool.GetServerAsync(cancellationToken);
-                var depotKey = await GetDepotKeyAsync(depotId, appId);
-                var cdnKey = await pool.AuthenticateWithServerAsync(depotId, server);
-                var manifest = await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, server, cdnKey, depotKey, proxyServer: null);
+                cancellationToken.ThrowIfCancellationRequested();
 
-
-                if (manifest.FilenamesEncrypted)
+                try
                 {
-                    manifest.DecryptFilenames(depotKey);
+                    var server = await pool.GetServerAsync(cancellationToken);
+                    var depotKey = await GetDepotKeyAsync(depotId, appId);
+                    var cdnKey = await pool.AuthenticateWithServerAsync(depotId, server);
+                    var manifest = await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, server, cdnKey, depotKey, proxyServer: null);
+
+
+                    if (manifest.FilenamesEncrypted)
+                    {
+                        manifest.DecryptFilenames(depotKey);
+                    }
+
+                    pool.ReturnServer(server, isFaulty: false);
+
+                    return manifest;
                 }
+                catch (TaskCanceledException)
+                {
+                    throw;
+                }
+                catch (SteamDepotAccessDeniedException)
+                {
+                    throw;
+                }
+                catch (SteamKitWebRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                                                             ex.StatusCode == System.Net.HttpStatusCode.Forbidden ||
+                                                             ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    throw new SteamManifestDownloadException(ex);
+                }
+                catch (Exception)
+                {
+                    // Retry..
+                }
+                finally
+                {
+                    attempts += 1;
+                }
+            }
 
-                pool.ReturnServer(server, isFaulty: false);
+            cancellationToken.ThrowIfCancellationRequested();
 
-                return manifest;
-            }
-            catch (SteamDepotAccessDeniedException)
-            {
-                throw;
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SteamManifestDownloadException(ex);
-            }
-            catch (Exception ex)
-            {
-                throw new SteamManifestDownloadException(ex);
-            }
+            throw new SteamManifestDownloadException($"Could not download the manifest = {manifestId} after {maxAttempts} attempts.");
         }
 
         public async Task<byte[]> GetDepotKeyAsync(DepotId depotId, AppId appId)
