@@ -74,7 +74,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public async Task DownloadAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
         {
-            if (IsRunning || _wasUsed) throw new InvalidOperationException("Download task was already started or cannot be reused.");
+            if (IsRunning || _wasUsed) throw new InvalidOperationException("Download task was already started and cannot be reused.");
 
             try
             {
@@ -119,7 +119,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     .OrderBy(x => x.Key)
                     .SelectMany(x => x);
 
-                var taskFactoriesQueue = sortedChunks.Select(chunkJob => new Func<Task>(async () => await Task.Run(() => DownloadChunkAsync(chunkJob, cancellationToken)))).ToList();
+                var taskFactoriesQueue = sortedChunks.Select(chunkJob => new Func<Task>(async () => await Task.Run(() => DownloadChunkAsync(chunkJob, _cancellationTokenSource.Token)))).ToList();
                 var tasksFactoryFailuresLookup = new ConcurrentDictionary<Func<Task>, int>();
 
                 await ParallelAsync(
@@ -152,7 +152,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
             finally
             {
-                await Task.WhenAll(_fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask())));
+                var disposeTasks = _fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask()));
+
+                var cancellationTCS = new TaskCompletionSource<object>();
+                _cancellationTokenSource.Token.Register(() => cancellationTCS.TrySetCanceled(), useSynchronizationContext: false);
+
+                await Task.WhenAny(Task.WhenAll(disposeTasks), cancellationTCS.Task);
                 _serverPool?.Close();
 
                 IsRunning = false;
@@ -163,6 +168,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         {
             while (_eventHandlersRunning > 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 await _eventHandlerCompleted.WaitAsync(cancellationToken);
             }
         }
@@ -185,6 +192,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     // Save the taskfactory that produced this task in case the task failed and we want to reattempt it
                     tasksFactoryLookup.Add(task, taskFactory);
                     tasksRunning.Add(task);
+
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
 
                 Task completedTask = await Task.WhenAny(tasksRunning).ConfigureAwait(false);
