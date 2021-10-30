@@ -1,6 +1,8 @@
 ﻿using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core.Structs;
 
+using Microsoft.Extensions.Logging;
+
 using Nito.AsyncEx;
 
 using SteamKit2;
@@ -29,6 +31,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public event EventHandler<FileVerifiedArgs> FileVerified;
         public event EventHandler<VerificationCompletedArgs> VerificationCompleted;
         public event EventHandler<EventArgs> DownloadComplete;
+
+        public ILogger Logger { get; set; }
 
         public bool IsRunning { get; private set; }
         public int TotalFileCount => _fileTargets.Count;
@@ -84,7 +88,11 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 // Create cancellation token source
                 _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _steamContentClient.CancellationToken);
 
+                Logger?.LogTrace($"Creating Steam CDN server pool");
+
                 _serverPool = new SteamCdnServerPool(_steamContentClient, AppId, _cancellationTokenSource.Token);
+
+                Logger?.LogTrace($"Created Steam CDN server pool");
 
                 var chunks = new ConcurrentBag<ChunkJob>();
 
@@ -96,11 +104,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 // Verify all files in parallel
                 var verificationTaskFactories = filteredFiles.Select(file => new Func<Task>(async () => await Task.Run(() => VerifyFileAsync(file, directory, chunks))));
 
+                Logger?.LogTrace($"Verifying files");
+
                 await ParallelAsync(
                     _steamContentClient.MaxConcurrentDownloadsPerTask,
                     verificationTaskFactories,
                     (factory, task) => throw task.Exception,
                     _cancellationTokenSource.Token);
+
+                Logger?.LogTrace($"Verification completed");
 
                 if (VerificationCompleted != null)
                 {
@@ -110,8 +122,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     RunEventHandler(() => VerificationCompleted.Invoke(this, new VerificationCompletedArgs(chunks.Select(x => x.ManifestFile).Distinct().ToList())));
                 }
 
+                Logger?.LogTrace($"Fetching depot key");
+
                 // Get the depot key with which we will process all chunks downloaded
                 _depotKey = await _steamContentClient.GetDepotKeyAsync(DepotId, AppId);
+
+                Logger?.LogTrace($"Got depot key");
 
                 // Download all chunks in parallel
                 var sortedChunks = chunks
@@ -122,12 +138,16 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 var taskFactoriesQueue = sortedChunks.Select(chunkJob => new Func<Task>(async () => await Task.Run(() => DownloadChunkAsync(chunkJob, _cancellationTokenSource.Token)))).ToList();
                 var tasksFactoryFailuresLookup = new ConcurrentDictionary<Func<Task>, int>();
 
+                Logger?.LogTrace($"Starting {taskFactoriesQueue.Count} download tasks");
+
                 await ParallelAsync(
                     _steamContentClient.MaxConcurrentDownloadsPerTask,
                     taskFactoriesQueue,
                     (factory, task) =>
                     {
                         tasksFactoryFailuresLookup.AddOrUpdate(factory, 0, (key, existingVal) => existingVal + 1);
+
+                        Logger?.LogTrace($"Failed to download chunk at attempt {tasksFactoryFailuresLookup.GetValueOrDefault(factory, 0)}");
 
                         if (tasksFactoryFailuresLookup.GetValueOrDefault(factory, 0) >= 10)
                         {
@@ -136,7 +156,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     },
                     _cancellationTokenSource.Token);
 
-
+                Logger?.LogTrace($"Completed download tasks");
 
                 if (DownloadComplete != null)
                 {
@@ -152,16 +172,23 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
             finally
             {
+                Logger?.LogTrace($"Disposing all file writers");
+
                 var disposeTasks = _fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask()));
 
                 var cancellationTCS = new TaskCompletionSource<object>();
                 _cancellationTokenSource.Token.Register(() => cancellationTCS.TrySetCanceled(), useSynchronizationContext: false);
 
                 await Task.WhenAny(Task.WhenAll(disposeTasks), cancellationTCS.Task);
+
+
+                Logger?.LogTrace($"Closing server pool");
                 _serverPool?.Close();
 
                 IsRunning = false;
             }
+
+            Logger?.LogTrace($"Exiting");
         }
 
         private async Task WaitForEventHandlersAsync(CancellationToken cancellationToken = default)
