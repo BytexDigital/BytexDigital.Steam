@@ -2,6 +2,8 @@
 using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core.Structs;
 
+using Microsoft.Extensions.Logging;
+
 using Nito.AsyncEx;
 
 using SteamKit2;
@@ -27,6 +29,7 @@ namespace BytexDigital.Steam.ContentDelivery
         private readonly Task _populatorTask;
         private const int MINIMUM_POOL_SIZE = 10;
 
+        public ILogger Logger { get; set; }
         public CDNClient CdnClient { get; private set; }
         public CDNClient.Server DesignatedProxyServer { get; private set; }
         public bool IsExhausted { get; private set; }
@@ -47,12 +50,18 @@ namespace BytexDigital.Steam.ContentDelivery
 
         public async Task<CDNClient.Server> GetServerAsync(CancellationToken cancellationToken = default)
         {
+            Logger?.LogTrace($"GetServerAsync: Called");
+
             if (!_activeServerEndpoints.TryPop(out var server))
             {
+                Logger?.LogTrace($"GetServerAsync: Could not pop server");
+
                 if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
                 {
+                    Logger?.LogTrace($"GetServerAsync: Set populatePoolEvent");
                     _populatePoolEvent.Set();
 
+                    Logger?.LogTrace($"GetServerAsync: Waiting for pool to be populated");
                     await _populatedEvent.WaitAsync(cancellationToken);
                 }
 
@@ -116,13 +125,19 @@ namespace BytexDigital.Steam.ContentDelivery
         {
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
+                Logger?.LogTrace($"MonitorAsync: Waiting for a few seconds before checking if pool needs population");
                 _populatePoolEvent.WaitOne(TimeSpan.FromSeconds(5));
 
+                Logger?.LogTrace($"MonitorAsync: Checking");
                 if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
                 {
+                    Logger?.LogTrace($"MonitorAsync: Pool will be populated");
                     _populatedEvent.Reset();
 
+                    Logger?.LogTrace($"MonitorAsync: Getting server list");
                     var servers = await GetServerListAsync();
+
+                    Logger?.LogTrace($"MonitorAsync: Got server list");
 
                     if (servers.Count == 0)
                     {
@@ -150,9 +165,10 @@ namespace BytexDigital.Steam.ContentDelivery
                     {
                         _availableServerEndpoints.Add(server);
                     }
-
-                    _populatedEvent.Set();
                 }
+
+                Logger?.LogTrace($"MonitorAsync: Notifying that pool is populated");
+                _populatedEvent.Set();
             }
         }
 

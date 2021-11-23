@@ -90,7 +90,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                 Logger?.LogTrace($"Creating Steam CDN server pool");
 
-                _serverPool = new SteamCdnServerPool(_steamContentClient, AppId, _cancellationTokenSource.Token);
+                _serverPool = new SteamCdnServerPool(_steamContentClient, AppId, _cancellationTokenSource.Token)
+                {
+                    Logger = Logger
+                };
 
                 Logger?.LogTrace($"Created Steam CDN server pool");
 
