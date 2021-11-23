@@ -211,9 +211,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                Logger?.LogTrace($"ParallelAsync: Checking if I can queue more tasks");
                 while (tasksRunning.Count < maxParallel && tasksFactoriesQueue.Count > 0)
                 {
                     var taskFactory = tasksFactoriesQueue.Dequeue();
+
+                    Logger?.LogTrace($"ParallelAsync: Starting task");
                     var task = taskFactory();
 
                     // Save the taskfactory that produced this task in case the task failed and we want to reattempt it
@@ -223,10 +226,16 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     cancellationToken.ThrowIfCancellationRequested();
                 }
 
+
+                Logger?.LogTrace($"ParallelAsync: Waiting for any of {tasksRunning.Count} tasks to complete");
                 Task completedTask = await Task.WhenAny(tasksRunning).ConfigureAwait(false);
+
+                Logger?.LogTrace($"ParallelAsync: A task completed");
 
                 if (completedTask.IsFaulted)
                 {
+                    Logger?.LogTrace($"ParallelAsync: Task was faulted");
+
                     // Reattempt the faulted task by putting it back into the queue at the end of it
                     var taskFactory = tasksFactoryLookup[completedTask];
 
