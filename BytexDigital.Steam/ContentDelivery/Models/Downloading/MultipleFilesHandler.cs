@@ -147,7 +147,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     {
                         tasksFactoryFailuresLookup.AddOrUpdate(factory, 0, (key, existingVal) => existingVal + 1);
 
-                        Logger?.LogTrace($"Failed to download chunk at attempt {tasksFactoryFailuresLookup.GetValueOrDefault(factory, 0)}");
+                        Logger?.LogTrace($"Failed to download chunk at attempt {tasksFactoryFailuresLookup.GetValueOrDefault(factory, 0)}: {task.Exception.Message}");
 
                         if (tasksFactoryFailuresLookup.GetValueOrDefault(factory, 0) >= 10)
                         {
@@ -312,13 +312,21 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         private async Task DownloadChunkAsync(ChunkJob chunkJob, CancellationToken cancellationToken)
         {
-            var server = await _serverPool.GetServerAsync(cancellationToken).ConfigureAwait(false);
+            var cancellationTokenWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(
+                new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token,
+                cancellationToken).Token;
+
+            Logger?.LogTrace($"Getting download server");
+            var server = await _serverPool.GetServerAsync(cancellationTokenWithTimeout).ConfigureAwait(false);
+
+            Logger?.LogTrace($"Authenticating with server if necessary");
             var token = await _serverPool.AuthenticateWithServerAsync(DepotId, server).ConfigureAwait(false);
 
-            CDNClient.DepotChunk chunkData = default;
+            CDNClient.DepotChunk chunkData;
 
             try
             {
+                Logger?.LogTrace($"Downloading chunk");
                 chunkData = await _serverPool.CdnClient.DownloadDepotChunkAsync(
                                 DepotId,
                                 chunkJob.InternalChunk,
@@ -340,8 +348,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 throw;
             }
 
+            Logger?.LogTrace($"Writing to FileWriter");
             await chunkJob.FileWriter.WriteAsync(chunkData.ChunkInfo.Offset, chunkData.Data);
 
+            Logger?.LogTrace($"Completed downloading chunk");
         }
 
         internal void RunEventHandler(Action action)
