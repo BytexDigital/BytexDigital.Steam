@@ -180,16 +180,19 @@ namespace BytexDigital.Steam.Core
                     }
                 }
 
-                _steamUser.LogOn(new SteamKit.SteamUser.LogOnDetails
+                Task.Run(() =>
                 {
-                    Username = Credentials.Username,
-                    Password = Credentials.Password,
-                    TwoFactorCode = TwoFactorCode,
-                    AuthCode = EmailAuthCode,
-                    SentryFileHash = hash,
-                    LoginKey = _authenticationProvider.GetLoginKey(Credentials),
-                    ShouldRememberPassword = true,
-                    LoginID = (uint)new Random().Next(100000000, 999999999)
+                    _steamUser.LogOn(new SteamKit.SteamUser.LogOnDetails
+                    {
+                        Username = Credentials.Username,
+                        Password = Credentials.Password,
+                        TwoFactorCode = TwoFactorCode,
+                        AuthCode = EmailAuthCode,
+                        SentryFileHash = hash,
+                        LoginKey = _authenticationProvider.GetLoginKey(Credentials),
+                        ShouldRememberPassword = true,
+                        LoginID = (uint)new Random().Next(100000000, 999999999)
+                    });
                 });
             }
             else
@@ -224,22 +227,25 @@ namespace BytexDigital.Steam.Core
 
             _authenticationProvider.SaveSentryFileContent(Credentials, callback.Data);
 
-            _steamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
+            Task.Run(() =>
             {
-                JobID = callback.JobID,
+                _steamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
+                {
+                    JobID = callback.JobID,
 
-                FileName = callback.FileName,
+                    FileName = callback.FileName,
 
-                BytesWritten = callback.BytesToWrite,
-                FileSize = callback.Data.Length,
-                Offset = callback.Offset,
+                    BytesWritten = callback.BytesToWrite,
+                    FileSize = callback.Data.Length,
+                    Offset = callback.Offset,
 
-                Result = EResult.OK,
-                LastError = 0,
+                    Result = EResult.OK,
+                    LastError = 0,
 
-                OneTimePassword = callback.OneTimePassword,
+                    OneTimePassword = callback.OneTimePassword,
 
-                SentryFileHash = hash
+                    SentryFileHash = hash
+                });
             });
         }
 
@@ -288,7 +294,7 @@ namespace BytexDigital.Steam.Core
                         TwoFactorCode = _codesProvider.GetTwoFactorAuthenticationCode(Credentials);
                     }
 
-                    InternalClient.Connect();
+                    Task.Run(() => InternalClient.Connect());
                 }
                 else
                 {
