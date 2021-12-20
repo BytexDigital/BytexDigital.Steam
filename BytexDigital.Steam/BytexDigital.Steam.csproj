@@ -10,6 +10,7 @@
 		<Copyright>Bytex Digital UG (haftungsbeschränkt)</Copyright>
 		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+		<PackageIcon>logo_squared_128.png</PackageIcon>
 		<RepositoryUrl>https://github.com/BytexDigital/BytexDigital.Steam</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<Description>Wrapper library for SteamKit2 for (incomplete) easier access to certain APIs.</Description>
@@ -36,7 +37,6 @@
 
 	<PropertyGroup>
 		<TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
-		<PackageIcon>logo_squared_128.png</PackageIcon>
 	</PropertyGroup>
 
 	<Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
