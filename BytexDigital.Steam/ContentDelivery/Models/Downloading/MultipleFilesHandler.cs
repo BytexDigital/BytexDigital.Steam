@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Nito.AsyncEx;
 
 using SteamKit2;
+using SteamKit2.CDN;
 
 using System;
 using System.Collections.Concurrent;
@@ -20,7 +21,7 @@ using static SteamKit2.DepotManifest;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public class MultipleFilesHandler : IDownloadHandler
+    public class MultipleFilesHandler : IDownloadHandler, IAsyncDisposable, IDisposable
     {
         public Manifest Manifest { get; }
         public AppId AppId { get; }
@@ -49,13 +50,13 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         }
 
 
-        internal readonly SteamContentClient _steamContentClient;
+        internal SteamContentClient _steamContentClient;
         internal byte[] _depotKey = null;
         internal int _eventHandlersRunning = 0;
         internal AsyncAutoResetEvent _eventHandlerCompleted = new AsyncAutoResetEvent(true);
 
-        private readonly ConcurrentDictionary<ManifestFile, FileTarget> _fileTargets = new ConcurrentDictionary<ManifestFile, FileTarget>();
-        private readonly ConcurrentBag<FileWriter> _fileWriters = new ConcurrentBag<FileWriter>();
+        private ConcurrentDictionary<ManifestFile, FileTarget> _fileTargets = new ConcurrentDictionary<ManifestFile, FileTarget>();
+        private ConcurrentBag<FileWriter> _fileWriters = new ConcurrentBag<FileWriter>();
         private CancellationTokenSource _cancellationTokenSource;
         private SteamCdnServerPool _serverPool;
         private bool _wasUsed = false;
@@ -223,6 +224,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     var task = taskFactory();
 
                     // Save the taskfactory that produced this task in case the task failed and we want to reattempt it
+                    if (tasksFactoryLookup.ContainsKey(task))
+                    {
+                        var oldTask = tasksFactoryLookup.Keys.First(x => x == task);
+
+                        if (oldTask.IsCompleted)
+                        {
+                            tasksFactoryLookup.Remove(oldTask);
+                        }
+                    }
                     tasksFactoryLookup.Add(task, taskFactory);
                     tasksRunning.Add(task);
 
@@ -334,7 +344,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             Logger?.LogTrace($"Authenticating with server if necessary");
             var token = await _serverPool.AuthenticateWithServerAsync(DepotId, server).ConfigureAwait(false);
 
-            CDNClient.DepotChunk chunkData;
+            DepotChunk chunkData;
 
             try
             {
@@ -343,9 +353,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                                 DepotId,
                                 chunkJob.InternalChunk,
                                 server,
-                                token,
                                 _depotKey,
-                                proxyServer: _serverPool.DesignatedProxyServer).ConfigureAwait(false);
+                                _serverPool.DesignatedProxyServer).ConfigureAwait(false);
 
                 if (chunkData.Data.Length != chunkJob.Chunk.CompressedLength && chunkData.Data.Length != chunkJob.Chunk.UncompressedLength)
                 {
@@ -389,8 +398,14 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             // Dispose all file writers to release potential file streams
             await Task.WhenAll(_fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask())));
 
+            _fileTargets = null;
+            _fileWriters = null;
+            _steamContentClient = null;
+
             // Dispose the server pool
             try { _serverPool?.Dispose(); } catch { }
+
+            _serverPool = null;
         }
 
         public void Dispose()

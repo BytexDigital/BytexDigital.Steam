@@ -43,8 +43,9 @@ namespace BytexDigital.Steam.Core
         internal SteamKit.CallbackManager CallbackManager { get; set; }
         internal IList<SteamKit.SteamApps.LicenseListCallback.License> Licenses { get; set; }
 
-        private readonly SteamUser _steamUser;
-        private readonly SteamApps _steamApps;
+        internal readonly SteamUser _steamUserHandler;
+        internal readonly SteamApps _steamAppsHandler;
+        internal readonly SteamContent _steamContentHandler;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly AsyncManualResetEvent _clientReadyEvent = new AsyncManualResetEvent(false);
         private readonly AsyncManualResetEvent _clientFaultedEvent = new AsyncManualResetEvent(false);
@@ -66,8 +67,9 @@ namespace BytexDigital.Steam.Core
             _cancellationTokenSource = new CancellationTokenSource();
             CallbackManager = new SteamKit.CallbackManager(InternalClient);
 
-            _steamUser = InternalClient.GetHandler<SteamKit.SteamUser>();
-            _steamApps = InternalClient.GetHandler<SteamKit.SteamApps>();
+            _steamUserHandler = InternalClient.GetHandler<SteamUser>();
+            _steamAppsHandler = InternalClient.GetHandler<SteamApps>();
+            _steamContentHandler = InternalClient.GetHandler<SteamContent>();
 
             Task.Run(async () => await CallbackManagerHandler());
 
@@ -182,7 +184,7 @@ namespace BytexDigital.Steam.Core
 
                 Task.Run(() =>
                 {
-                    _steamUser.LogOn(new SteamKit.SteamUser.LogOnDetails
+                    _steamUserHandler.LogOn(new SteamKit.SteamUser.LogOnDetails
                     {
                         Username = Credentials.Username,
                         Password = Credentials.Password,
@@ -197,7 +199,7 @@ namespace BytexDigital.Steam.Core
             }
             else
             {
-                _steamUser.LogOnAnonymous();
+                _steamUserHandler.LogOnAnonymous();
             }
         }
 
@@ -213,7 +215,7 @@ namespace BytexDigital.Steam.Core
         private void OnLoginKey(SteamUser.LoginKeyCallback callback)
         {
             _authenticationProvider.SaveLoginKey(Credentials, callback.LoginKey);
-            _steamUser.AcceptNewLoginKey(callback);
+            _steamUserHandler.AcceptNewLoginKey(callback);
         }
 
         private void OnMachineAuth(SteamUser.UpdateMachineAuthCallback callback)
@@ -229,7 +231,7 @@ namespace BytexDigital.Steam.Core
 
             Task.Run(() =>
             {
-                _steamUser.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
+                _steamUserHandler.SendMachineAuthResponse(new SteamUser.MachineAuthDetails
                 {
                     JobID = callback.JobID,
 
@@ -267,7 +269,7 @@ namespace BytexDigital.Steam.Core
 
             Task.Run(async () =>
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(100));
+                await Task.Delay(TimeSpan.FromMilliseconds(500));
 
                 InternalClient.Connect();
             });

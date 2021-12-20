@@ -51,7 +51,8 @@ namespace BytexDigital.Steam.TestClient
                 //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
                 //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
-                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2220098919);
+                //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2683654050);
+                var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
 
                 Console.WriteLine("Starting download");
 
@@ -61,6 +62,8 @@ namespace BytexDigital.Steam.TestClient
                 downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
                 await downloadHandler.DownloadToFolderAsync(@".\download"/*, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token*/);
+
+                await downloadHandler.DisposeAsync();
             }
             catch (Exception ex)
             {
@@ -69,6 +72,15 @@ namespace BytexDigital.Steam.TestClient
 
             steamClient.Shutdown();
             Console.WriteLine("Done");
+
+            Console.ReadLine();
+
+            while (true)
+            {
+                //steamClient = null;
+                Console.ReadLine();
+                System.GC.Collect();
+            }
         }
 
         private class AuthCodeProvider : SteamAuthenticationCodesProvider

@@ -49,7 +49,7 @@ namespace BytexDigital.Steam.ContentDelivery
             _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(SteamClient.CancellationToken);
         }
 
-        public async Task<Manifest> GetManifestAsync(AppId appId, DepotId depotId, ManifestId manifestId, CancellationToken cancellationToken = default)
+        public async Task<Manifest> GetManifestAsync(AppId appId, DepotId depotId, ManifestId manifestId, string branch = null, string branchPassword = null, CancellationToken cancellationToken = default)
         {
             await SteamClient.AwaitReadyAsync(cancellationToken);
 
@@ -67,7 +67,8 @@ namespace BytexDigital.Steam.ContentDelivery
                     var server = await pool.GetServerAsync(cancellationToken);
                     var depotKey = await GetDepotKeyAsync(depotId, appId);
                     var cdnKey = await pool.AuthenticateWithServerAsync(depotId, server);
-                    var manifest = await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, server, cdnKey, depotKey, proxyServer: null);
+                    var manifestCode = await SteamClient._steamContentHandler.GetManifestRequestCode(depotId, appId, manifestId);
+                    var manifest = await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, manifestCode, server, depotKey);
 
 
                     if (manifest.FilenamesEncrypted)
@@ -102,6 +103,11 @@ namespace BytexDigital.Steam.ContentDelivery
                     attempts += 1;
                 }
             }
+
+            try
+            {
+                pool.Close();
+            } catch { }
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -193,11 +199,14 @@ namespace BytexDigital.Steam.ContentDelivery
             return items;
         }
 
-#nullable enable
         public async Task<IDownloadHandler> GetPublishedFileDataAsync(PublishedFileId publishedFileId, ManifestId? manifestId = null, string? branch = null, string? branchPassword = null, SteamOs? os = null)
-#nullable disable
         {
             var publishedFileDetails = await GetPublishedFileDetailsAsync(publishedFileId);
+
+            if (publishedFileDetails.consumer_appid == 0)
+            {
+                throw new SteamPublishedFileNotFoundException(publishedFileId);
+            }
 
             if (!string.IsNullOrEmpty(publishedFileDetails.file_url))
             {
@@ -210,21 +219,20 @@ namespace BytexDigital.Steam.ContentDelivery
                     publishedFileDetails.consumer_appid,
                     manifestId ?? publishedFileDetails.hcontent_file,
                     branch,
+                    branchPassword,
                     os,
                     true);
             }
         }
 
-#nullable enable
         public async Task<IDownloadHandler> GetAppDataAsync(AppId appId, DepotId depotId, ManifestId? manifestId = null, string branch = "public", string? branchPassword = null, SteamOs? os = null)
-#nullable disable
         {
             if (!manifestId.HasValue)
             {
                 manifestId = await GetDepotDefaultManifestIdAsync(appId, depotId, branch, branchPassword);
             }
 
-            return await GetAppDataInternalAsync(appId, depotId, manifestId.Value, branch, os ?? SteamClient.GetSteamOs(), false);
+            return await GetAppDataInternalAsync(appId, depotId, manifestId.Value, branch, branchPassword, os ?? SteamClient.GetSteamOs(), false);
         }
 
         public async Task<IReadOnlyList<Depot>> GetDepotsOfBranchAsync(AppId appId, string branch)
@@ -420,9 +428,7 @@ namespace BytexDigital.Steam.ContentDelivery
             throw new ArgumentException($"Combination of app id = {appId}, depot id = {depotId} and branch = {branch} could not be found.");
         }
 
-#nullable enable
-        internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", SteamOs? os = null, bool isUserGeneratedContent = false)
-#nullable disable
+        internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId, ManifestId? manifestId, string branch = "public", string branchPassword = null, SteamOs? os = null, bool isUserGeneratedContent = false)
         {
             if (!await GetHasAccessAsync(appId, depotId))
             {
@@ -462,67 +468,92 @@ namespace BytexDigital.Steam.ContentDelivery
             }
 
 
-            return new MultipleFilesHandler(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, CancellationToken), appId, depotId.Value, manifestId.Value);
+            return new MultipleFilesHandler(this, await GetManifestAsync(appId, depotId.Value, manifestId.Value, branch, branchPassword, CancellationToken), appId, depotId.Value, manifestId.Value);
         }
 
         internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(AppId appId)
         {
-            if (!_productAccessKeys.ContainsKey(appId))
+            await RequestAccessTokenIfNecessaryAsync(appId);
+
+            var result = await GetProductInfoAsync(new List<AppId> { appId }, new List<uint>());
+
+            return result.Apps[appId];
+        }
+
+        internal async Task RequestAccessTokenIfNecessaryAsync(AppId appId)
+        {
+            if (_productAccessKeys.ContainsKey(appId)) return;
+
+            var accessTokenRequestResult = await SteamApps.PICSGetAccessTokens(new List<uint> { appId }, new List<uint>());
+
+            if (accessTokenRequestResult.AppTokensDenied.Contains(appId)) throw new SteamAppAccessTokenDeniedException(appId);
+
+            _productAccessKeys.AddOrUpdate(appId, accessTokenRequestResult.AppTokens[appId], (appId, val) => accessTokenRequestResult.AppTokens[appId]);
+        }
+
+        internal async Task<SteamApps.PICSProductInfoCallback> GetProductInfoAsync(List<AppId> appIds, List<uint> packageIds)
+        {
+            List<SteamApps.PICSRequest> appRequests = new List<SteamApps.PICSRequest>();
+            List<SteamApps.PICSRequest> packageRequests = new List<SteamApps.PICSRequest>();
+
+            foreach (var appId in appIds)
             {
-                var accessTokenRequestResult = await SteamApps.PICSGetAccessTokens(new List<uint> { appId }, new List<uint>());
+                await RequestAccessTokenIfNecessaryAsync(appId);
 
-                if (accessTokenRequestResult.AppTokensDenied.Contains(appId)) throw new SteamAppAccessTokenDeniedException(appId);
-
-                _productAccessKeys.AddOrUpdate(appId, accessTokenRequestResult.AppTokens[appId], (appId, val) => accessTokenRequestResult.AppTokens[appId]);
+                appRequests.Add(new SteamApps.PICSRequest
+                {
+                    ID = appId,
+                    AccessToken = _productAccessKeys[appId]
+                });
             }
 
-            var result = await SteamApps.PICSGetProductInfo(appId, null, onlyPublic: false);
+            foreach (var packageId in packageIds)
+            {
+                packageRequests.Add(new SteamApps.PICSRequest
+                {
+                    ID = packageId
+                });
+            }
 
-            return result.Results.First().Apps[appId];
+            var result = await SteamApps.PICSGetProductInfo(appRequests, packageRequests);
+
+            return result.Results.First();
         }
 
-        internal async Task<IList<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo>> GetPackageInfosAsync(IEnumerable<uint> packageIds)
+        internal async Task<bool> GetHasAccessAsync(AppId appId, DepotId? depotId)
         {
-            var result = await SteamApps.PICSGetProductInfo(new List<uint>(), packageIds);
-
-            return result.Results.First().Packages.Select(x => x.Value).ToList();
-        }
-
-        internal async Task<bool> GetHasAccessAsync(AppId? appId, DepotId? depotId)
-        {
-            IEnumerable<uint> query = null;
+            List<uint> packageIds = null;
 
             if (SteamUser.SteamID.AccountType == SteamKit.EAccountType.AnonUser)
             {
-                query = new List<uint> { 17906 };
+                packageIds = new List<uint> { 17906 };
             }
             else
             {
-                query = SteamClient.Licenses.Select(x => x.PackageID);
+                packageIds = SteamClient.Licenses.Select(x => x.PackageID).ToList();
             }
 
-            var packageInfos = await GetPackageInfosAsync(query);
+            var packageInfos = (await GetProductInfoAsync(new List<AppId> { appId }, packageIds));
 
-            foreach (var packageInfo in packageInfos)
-            {
-                if (appId.HasValue)
-                {
-                    if (packageInfo.KeyValues["appids"].Children.Any(x => x.AsUnsignedInteger() == appId.Value))
-                    {
-                        return true;
-                    }
-                }
+            return packageInfos.Apps.ContainsKey(appId);
 
-                if (depotId.HasValue)
-                {
-                    if (packageInfo.KeyValues["depotids"].Children.Any(x => x.AsUnsignedInteger() == depotId.Value))
-                    {
-                        return true;
-                    }
-                }
-            }
+            //foreach (var packageInfo in packageInfos)
+            //{
+            //    if (packageInfo.KeyValues["appids"].Children.Any(x => x.AsUnsignedInteger() == appId))
+            //    {
+            //        return true;
+            //    }
 
-            return false;
+            //    if (depotId.HasValue)
+            //    {
+            //        if (packageInfo.KeyValues["depotids"].Children.Any(x => x.AsUnsignedInteger() == depotId.Value))
+            //        {
+            //            return true;
+            //        }
+            //    }
+            //}
+
+            //return false;
         }
 
         internal async Task<bool> GetFreeLicenseAsync(AppId appId)

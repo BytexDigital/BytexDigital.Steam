@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Nito.AsyncEx;
 
 using SteamKit2;
+using SteamKit2.CDN;
 
 using System;
 using System.Collections.Concurrent;
@@ -19,19 +20,19 @@ namespace BytexDigital.Steam.ContentDelivery
 {
     public class SteamCdnServerPool : IDisposable
     {
-        private readonly SteamContentClient _steamContentClient;
+        private SteamContentClient _steamContentClient;
         private readonly AppId _appId;
         private readonly CancellationTokenSource _cancellationTokenSource;
-        private readonly BlockingCollection<CDNClient.Server> _availableServerEndpoints;
-        private readonly ConcurrentStack<CDNClient.Server> _activeServerEndpoints;
+        private readonly BlockingCollection<Server> _availableServerEndpoints;
+        private readonly ConcurrentStack<Server> _activeServerEndpoints;
         private readonly AutoResetEvent _populatePoolEvent;
         private readonly AsyncManualResetEvent _populatedEvent;
         private readonly Task _populatorTask;
         private const int MINIMUM_POOL_SIZE = 10;
 
         public ILogger Logger { get; set; }
-        public CDNClient CdnClient { get; private set; }
-        public CDNClient.Server DesignatedProxyServer { get; private set; }
+        public Client CdnClient { get; private set; }
+        public Server DesignatedProxyServer { get; private set; }
         public bool IsExhausted { get; private set; }
 
         public SteamCdnServerPool(SteamContentClient steamContentClient, AppId appId, CancellationToken cancellationToken = default)
@@ -39,16 +40,16 @@ namespace BytexDigital.Steam.ContentDelivery
             _steamContentClient = steamContentClient;
             _appId = appId;
             _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, new CancellationTokenSource().Token);
-            _availableServerEndpoints = new BlockingCollection<CDNClient.Server>();
-            _activeServerEndpoints = new ConcurrentStack<CDNClient.Server>();
+            _availableServerEndpoints = new BlockingCollection<Server>();
+            _activeServerEndpoints = new ConcurrentStack<Server>();
             _populatePoolEvent = new AutoResetEvent(true);
             _populatedEvent = new AsyncManualResetEvent(false);
             _populatorTask = Task.Factory.StartNew(MonitorAsync).Unwrap();
 
-            CdnClient = new CDNClient(_steamContentClient.SteamClient.InternalClient);
+            CdnClient = new Client(_steamContentClient.SteamClient.InternalClient);
         }
 
-        public async Task<CDNClient.Server> GetServerAsync(CancellationToken cancellationToken = default)
+        public async Task<Server> GetServerAsync(CancellationToken cancellationToken = default)
         {
             Logger?.LogTrace($"GetServerAsync: Called");
 
@@ -73,14 +74,14 @@ namespace BytexDigital.Steam.ContentDelivery
             return server;
         }
 
-        public void ReturnServer(CDNClient.Server server, bool isFaulty)
+        public void ReturnServer(Server server, bool isFaulty)
         {
             if (isFaulty) return;
 
             _activeServerEndpoints.Push(server);
         }
 
-        public async Task<string> AuthenticateWithServerAsync(DepotId depotId, CDNClient.Server server)
+        public async Task<string> AuthenticateWithServerAsync(DepotId depotId, Server server)
         {
             string host = server.Host;
 
@@ -155,7 +156,7 @@ namespace BytexDigital.Steam.ContentDelivery
                         .Where(server =>
                         {
                             var isContentServer = server.Type == "SteamCache" || server.Type == "CDN";
-                            var allowsAppId = server.AllowedAppIds == null || server.AllowedAppIds.Contains(_appId);
+                            var allowsAppId = server.AllowedAppIds.Length == 0 || server.AllowedAppIds.Contains(_appId);
 
                             return isContentServer && allowsAppId;
                         })
@@ -172,7 +173,7 @@ namespace BytexDigital.Steam.ContentDelivery
             }
         }
 
-        private async Task<IReadOnlyCollection<CDNClient.Server>> GetServerListAsync()
+        private async Task<IReadOnlyCollection<Server>> GetServerListAsync()
         {
             int throttleDelay = 0;
 
@@ -202,12 +203,13 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
             }
 
-            return new List<CDNClient.Server>();
+            return new List<Server>();
         }
 
         public void Close()
         {
             _cancellationTokenSource.Cancel();
+            _steamContentClient = null;
         }
 
         public void Dispose()
