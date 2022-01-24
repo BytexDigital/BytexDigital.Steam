@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 
 using Nito.AsyncEx;
 
-using SteamKit2;
 using SteamKit2.CDN;
 
 using System;
@@ -295,7 +294,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 File.Delete(filePath);
             }
 
-            var fileStream = new FileStream(filePath, FileMode.CreateNew, access: FileAccess.Write, share: FileShare.None, bufferSize: 131072, useAsync: true);
+            var fileStream = new FileStream(filePath, FileMode.Create, access: FileAccess.Write, share: FileShare.None, bufferSize: 131072, useAsync: true);
             fileStream.SetLength((long)file.TotalSize);
 
             var target = new FileStreamTarget(fileStream);

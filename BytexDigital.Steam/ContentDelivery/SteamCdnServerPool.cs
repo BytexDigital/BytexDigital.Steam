@@ -53,10 +53,12 @@ namespace BytexDigital.Steam.ContentDelivery
         {
             Logger?.LogTrace($"GetServerAsync: Called");
 
-            if (!_activeServerEndpoints.TryPop(out var server))
-            {
-                Logger?.LogTrace($"GetServerAsync: Could not pop server");
+            Server server = default;
 
+            if (IsExhausted) throw new SteamNoContentServerFoundException(_appId);
+
+            while (server == null)
+            {
                 if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
                 {
                     Logger?.LogTrace($"GetServerAsync: Set populatePoolEvent");
@@ -66,9 +68,8 @@ namespace BytexDigital.Steam.ContentDelivery
                     await _populatedEvent.WaitAsync(cancellationToken);
                 }
 
-                if (IsExhausted) throw new SteamNoContentServerFoundException(_appId);
-
-                server = _availableServerEndpoints.Take(cancellationToken);
+                Logger?.LogTrace($"GetServerAsync: Trying to pop..");
+                _activeServerEndpoints.TryPop(out server);
             }
 
             return server;
