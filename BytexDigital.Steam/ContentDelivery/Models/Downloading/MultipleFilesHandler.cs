@@ -100,9 +100,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 var chunks = new ConcurrentBag<ChunkJob>();
 
                 // Filter out files that are directories or that the caller does not want
-                var filteredFiles = Manifest.Files
+                IEnumerable<ManifestFile> filteredFiles = Manifest.Files
                     .Where(file => file.Flags != Enumerations.ManifestFileFlag.Directory && condition.Invoke(file))
                     .OrderBy(x => x.FileName);
+
+                // Filter all files that are possible duplicates
+                filteredFiles = filteredFiles.GroupBy(x => x.FileName).Select(x => x.First());
 
                 // Verify all files in parallel
                 var verificationTaskFactories = filteredFiles.Select(file => new Func<Task>(async () => await Task.Run(() => VerifyFileAsync(file, directory, chunks))));
