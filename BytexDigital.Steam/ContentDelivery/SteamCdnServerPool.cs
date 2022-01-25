@@ -69,7 +69,7 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
 
                 Logger?.LogTrace($"GetServerAsync: Trying to pop..");
-                _activeServerEndpoints.TryPop(out server);
+                _availableServerEndpoints.TryTake(out server);
             }
 
             return server;
