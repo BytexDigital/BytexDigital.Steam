@@ -36,6 +36,8 @@ namespace BytexDigital.Steam.Core
         public string TwoFactorCode { get; set; }
         public string EmailAuthCode { get; private set; }
 
+        public int MaximumLogonAttempts { get; set; } = 1;
+
         public uint SuggestedCellId { get; private set; }
 
         public Exception FaultException { get; private set; }
@@ -52,6 +54,7 @@ namespace BytexDigital.Steam.Core
         private readonly SteamAuthenticationCodesProvider _codesProvider;
         private readonly SteamAuthenticationFilesProvider _authenticationProvider;
         private bool _isClientRunning = false;
+        private int _logonAttemptsCounter = 0;
 
         public SteamClient(SteamCredentials credentials) : this(credentials, new DefaultSteamAuthenticationCodesProvider(), new DefaultSteamAuthenticationFilesProvider())
         {
@@ -285,6 +288,14 @@ namespace BytexDigital.Steam.Core
             }
             else
             {
+                _logonAttemptsCounter++;
+
+                if (_logonAttemptsCounter > MaximumLogonAttempts)
+                {
+                    FaultException = new SteamLogonException(callback.Result);
+                    _clientFaultedEvent.Set();
+                }
+
                 if (callback.Result == EResult.AccountLogonDenied || callback.Result == EResult.AccountLoginDeniedNeedTwoFactor)
                 {
                     if (callback.Result == EResult.AccountLogonDenied)
