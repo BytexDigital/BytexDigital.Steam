@@ -24,10 +24,14 @@ namespace BytexDigital.Steam.ContentDelivery
         private readonly AppId _appId;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly BlockingCollection<Server> _availableServerEndpoints;
-        private readonly ConcurrentStack<Server> _activeServerEndpoints;
+        //private readonly ConcurrentStack<Server> _activeServerEndpoints;
+        private readonly List<ServerWithRating> _ratedServers;
+        private readonly ConcurrentDictionary<Server, List<int>> _serverRatingsHistory;
         private readonly AutoResetEvent _populatePoolEvent;
         private readonly AsyncManualResetEvent _populatedEvent;
         private readonly Task _populatorTask;
+        private readonly Task _ratingsAnalyzerTask;
+        private readonly AsyncLock _serverLock;
         private const int MINIMUM_POOL_SIZE = 10;
 
         public ILogger Logger { get; set; }
@@ -41,10 +45,14 @@ namespace BytexDigital.Steam.ContentDelivery
             _appId = appId;
             _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, new CancellationTokenSource().Token);
             _availableServerEndpoints = new BlockingCollection<Server>();
-            _activeServerEndpoints = new ConcurrentStack<Server>();
+            //_activeServerEndpoints = new ConcurrentStack<Server>();
+            _serverRatingsHistory = new ConcurrentDictionary<Server, List<int>>();
+            _ratedServers = new List<ServerWithRating>();
             _populatePoolEvent = new AutoResetEvent(true);
             _populatedEvent = new AsyncManualResetEvent(false);
             _populatorTask = Task.Factory.StartNew(MonitorAsync).Unwrap();
+            _ratingsAnalyzerTask = Task.Factory.StartNew(AnalyzeRatingsAsync).Unwrap();
+            _serverLock = new AsyncLock();
 
             CdnClient = new Client(_steamContentClient.SteamClient.InternalClient);
         }
@@ -59,7 +67,26 @@ namespace BytexDigital.Steam.ContentDelivery
 
             while (server == null)
             {
-                if (_activeServerEndpoints.TryPop(out server)) continue;
+                if (_ratedServers.Count > 0)
+                {
+                    using (var lk = await _serverLock.LockAsync(cancellationToken))
+                    {
+                        var random = new Random();
+
+                        var serverWithRating = _ratedServers
+                            .OrderBy(x => x.Rating)
+                            .Take(10)
+                            .OrderBy(x => random.Next())
+                            .FirstOrDefault();
+
+                        if (serverWithRating != null)
+                        {
+                            server = serverWithRating.Server;
+
+                            continue;
+                        }
+                    }
+                }
 
                 if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
                 {
@@ -77,11 +104,40 @@ namespace BytexDigital.Steam.ContentDelivery
             return server;
         }
 
-        public void ReturnServer(Server server, bool isFaulty)
+        public async void ReturnServer(Server server, bool isFaulty, int rating = 0)
         {
-            if (isFaulty) return;
+            if (isFaulty)
+            {
+                using var lk = await _serverLock.LockAsync().ConfigureAwait(false);
 
-            _activeServerEndpoints.Push(server);
+                if (_ratedServers.Any(x => x.Server == server))
+                {
+                    _ratedServers.Remove(_ratedServers.First(x => x.Server == server));
+                }
+
+                return;
+            }
+
+            //_activeServerEndpoints.Push(server);
+
+            if (rating != 0)
+            {
+                using (var lk = await _serverLock.LockAsync().ConfigureAwait(false))
+                {
+                    var ratings = _serverRatingsHistory.GetOrAdd(server, x => new List<int>());
+
+                    ratings.Add(rating);
+
+                    if (!_ratedServers.Any(x => x.Server == server))
+                    {
+                        _ratedServers.Add(new ServerWithRating
+                        {
+                            Server = server,
+                            Rating = rating
+                        });
+                    }
+                }
+            }
         }
 
         public async Task<string> AuthenticateWithServerAsync(DepotId depotId, Server server)
@@ -176,6 +232,32 @@ namespace BytexDigital.Steam.ContentDelivery
             }
         }
 
+        private async Task AnalyzeRatingsAsync()
+        {
+            while (!_cancellationTokenSource.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+
+                _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                using var lk = await _serverLock.LockAsync().ConfigureAwait(false);
+
+                foreach (var history in _serverRatingsHistory)
+                {
+                    var serverWithRating = _ratedServers.FirstOrDefault(x => x.Server == history.Key);
+
+                    if (serverWithRating == null) continue;
+                    if (history.Value.Count < 10) continue; // Don't calculate an average with less than 10 datapoints
+
+                    serverWithRating.Rating = (int)history.Value.Average();
+
+                    _serverRatingsHistory[serverWithRating.Server].Clear();
+                }
+
+                //Console.WriteLine($"Ratings: {string.Join(", ", _ratedServers.Select(x => $"{x.Server.Host}: {x.Rating}"))}");
+            }
+        }
+
         private async Task<IReadOnlyCollection<Server>> GetServerListAsync()
         {
             int throttleDelay = 0;
@@ -218,6 +300,12 @@ namespace BytexDigital.Steam.ContentDelivery
         public void Dispose()
         {
             Close();
+        }
+
+        private class ServerWithRating
+        {
+            public Server Server { get; set; }
+            public int Rating { get; set; }
         }
     }
 }

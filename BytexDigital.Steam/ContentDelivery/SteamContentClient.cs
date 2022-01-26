@@ -53,7 +53,7 @@ namespace BytexDigital.Steam.ContentDelivery
         {
             await SteamClient.AwaitReadyAsync(cancellationToken);
 
-            var pool = new SteamCdnServerPool(this, appId);
+            using var pool = new SteamCdnServerPool(this, appId);
 
             int attempts = 0;
             const int maxAttempts = 10;
@@ -103,11 +103,6 @@ namespace BytexDigital.Steam.ContentDelivery
                     attempts += 1;
                 }
             }
-
-            try
-            {
-                pool.Close();
-            } catch { }
 
             cancellationToken.ThrowIfCancellationRequested();
 

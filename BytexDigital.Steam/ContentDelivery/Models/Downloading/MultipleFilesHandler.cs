@@ -10,6 +10,7 @@ using SteamKit2.CDN;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -351,6 +352,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             try
             {
                 Logger?.LogTrace($"Downloading chunk");
+                var stopwatch = Stopwatch.StartNew();
+
                 chunkData = await _serverPool.CdnClient.DownloadDepotChunkAsync(
                                 DepotId,
                                 chunkJob.InternalChunk,
@@ -363,7 +366,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     throw new InvalidDataException("Chunk data was not the expected length.");
                 }
 
-                _serverPool.ReturnServer(server, isFaulty: false);
+                stopwatch.Stop();
+
+                _serverPool.ReturnServer(server, isFaulty: false, rating: (int)stopwatch.ElapsedMilliseconds);
             }
             catch
             {

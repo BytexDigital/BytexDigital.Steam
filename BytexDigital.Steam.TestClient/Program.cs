@@ -1,10 +1,7 @@
 ﻿using BytexDigital.Steam.ContentDelivery;
-using BytexDigital.Steam.ContentDelivery.Models.Downloading;
 using BytexDigital.Steam.Core;
-using BytexDigital.Steam.Core.Enumerations;
 
 using System;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.TestClient
@@ -31,7 +28,7 @@ namespace BytexDigital.Steam.TestClient
             }
 
             SteamClient steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
-            SteamContentClient steamContentClient = new SteamContentClient(steamClient, 10);
+            SteamContentClient steamContentClient = new SteamContentClient(steamClient, 50);
 
             try
             {
