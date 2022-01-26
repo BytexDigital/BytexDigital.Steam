@@ -59,6 +59,8 @@ namespace BytexDigital.Steam.ContentDelivery
 
             while (server == null)
             {
+                if (_activeServerEndpoints.TryPop(out server)) continue;
+
                 if (_availableServerEndpoints.Count < MINIMUM_POOL_SIZE)
                 {
                     Logger?.LogTrace($"GetServerAsync: Set populatePoolEvent");
