@@ -56,6 +56,7 @@ namespace BytexDigital.Steam.Core
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly AsyncManualResetEvent _clientReadyEvent = new AsyncManualResetEvent(false);
         private readonly AsyncManualResetEvent _clientFaultedEvent = new AsyncManualResetEvent(false);
+        private readonly AsyncSemaphore _clientReconnectSemaphore = new AsyncSemaphore(1);
         private readonly SteamAuthenticationCodesProvider _codesProvider;
         private readonly SteamAuthenticationFilesProvider _authenticationProvider;
         private bool _isClientRunning = false;
@@ -275,23 +276,37 @@ namespace BytexDigital.Steam.Core
 
             _clientReadyEvent.Reset();
 
-            if (_cancellationTokenSource.IsCancellationRequested || callback.UserInitiated) return;
+            if (callback.UserInitiated) return;
+            if (_cancellationTokenSource.IsCancellationRequested) return;
 
-            Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(500));
+                await Task.Delay(TimeSpan.FromSeconds(1));
+
+                CancellationToken.ThrowIfCancellationRequested();
+
+                // Keep this thread hostage until noone is currently performing work that might change how we sign into Steam, e.g.
+                // authentication details such as 2FA code
+                using var lk = await _clientReconnectSemaphore.LockAsync(CancellationToken);
+
+                CancellationToken.ThrowIfCancellationRequested();
 
                 InternalClient.Connect();
             });
         }
 
-        private void OnLoggedOn(SteamKit.SteamUser.LoggedOnCallback callback)
+        private async void OnLoggedOn(SteamKit.SteamUser.LoggedOnCallback callback)
         {
             InternalClientLoggedOn?.Invoke();
+
+            // Locking this semaphore makes the reconnect logic halt until we are done in this method
+            using var lk = await _clientReconnectSemaphore.LockAsync();
 
             if (callback.Result == EResult.OK)
             {
                 SuggestedCellId = callback.CellID;
+
+                _logonAttemptsCounter = 0;
 
                 _clientReadyEvent.Set();
             }
@@ -299,10 +314,12 @@ namespace BytexDigital.Steam.Core
             {
                 _logonAttemptsCounter++;
 
+                // Don't spam unsuccessful logon attempts as this might get us rate limited
                 if (_logonAttemptsCounter > MaximumLogonAttempts)
                 {
                     FaultException = new SteamLogonException(callback.Result);
                     _clientFaultedEvent.Set();
+                    _cancellationTokenSource.Cancel();
 
                     return;
                 }
@@ -318,12 +335,16 @@ namespace BytexDigital.Steam.Core
                         TwoFactorCode = _codesProvider.GetTwoFactorAuthenticationCode(Credentials);
                     }
 
-                    Task.Run(() => InternalClient.Connect());
+                    // By returning, we are releasing the aquired semaphore. This will make the disconnected
+                    // callback continue it's execution and attempt a reconnect if our client hasn't been marked
+                    // as cancelled/closed.
+                    return;
                 }
                 else
                 {
                     FaultException = new SteamLogonException(callback.Result);
                     _clientFaultedEvent.Set();
+                    _cancellationTokenSource.Cancel();
                 }
             }
         }
