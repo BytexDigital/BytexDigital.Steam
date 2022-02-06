@@ -23,6 +23,11 @@ namespace BytexDigital.Steam.Core
         public SteamKit.SteamClient InternalClient { get; private set; }
         public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
+        public event Action InternalClientConnected;
+        public event Action InternalClientDisconnected;
+        public event Action InternalClientLoggedOn;
+        public event Action InternalClientLoggedOff;
+
         /// <summary>
         /// Indicates whether the client is ready for any operation.
         /// </summary>
@@ -259,11 +264,15 @@ namespace BytexDigital.Steam.Core
 
         private void OnConnected(SteamKit.SteamClient.ConnectedCallback callback)
         {
+            InternalClientConnected?.Invoke();
+
             AttemptLogin();
         }
 
         private void OnDisconnected(SteamKit.SteamClient.DisconnectedCallback callback)
         {
+            InternalClientDisconnected?.Invoke();
+
             _clientReadyEvent.Reset();
 
             if (_cancellationTokenSource.IsCancellationRequested || callback.UserInitiated) return;
@@ -278,6 +287,8 @@ namespace BytexDigital.Steam.Core
 
         private void OnLoggedOn(SteamKit.SteamUser.LoggedOnCallback callback)
         {
+            InternalClientLoggedOn?.Invoke();
+
             if (callback.Result == EResult.OK)
             {
                 SuggestedCellId = callback.CellID;
@@ -319,6 +330,8 @@ namespace BytexDigital.Steam.Core
 
         private void OnLoggedOff(SteamKit.SteamUser.LoggedOffCallback callback)
         {
+            InternalClientLoggedOff?.Invoke();
+
             _clientReadyEvent.Reset();
         }
     }

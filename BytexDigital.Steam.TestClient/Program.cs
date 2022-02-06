@@ -30,6 +30,11 @@ namespace BytexDigital.Steam.TestClient
             SteamClient steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(), new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
             SteamContentClient steamContentClient = new SteamContentClient(steamClient, 50);
 
+            steamClient.InternalClientConnected += () => Console.WriteLine("Event: Connected");
+            steamClient.InternalClientDisconnected += () => Console.WriteLine("Event: Disconnected");
+            steamClient.InternalClientLoggedOn += () => Console.WriteLine("Event: Logged on");
+            steamClient.InternalClientLoggedOff += () => Console.WriteLine("Event: Logged off");
+
             try
             {
                 await steamClient.ConnectAsync();
