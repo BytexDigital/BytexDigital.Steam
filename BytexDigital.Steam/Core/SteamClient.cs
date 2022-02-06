@@ -21,7 +21,7 @@ namespace BytexDigital.Steam.Core
     {
         public SteamCredentials Credentials { get; private set; }
         public SteamKit.SteamClient InternalClient { get; private set; }
-        public CancellationToken CancellationToken { get; private set; }
+        public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
         /// <summary>
         /// Indicates whether the client is ready for any operation.
@@ -83,8 +83,6 @@ namespace BytexDigital.Steam.Core
             CallbackManager.Subscribe<SteamKit.SteamApps.LicenseListCallback>(OnLicenseList);
             CallbackManager.Subscribe<SteamKit.SteamUser.UpdateMachineAuthCallback>(OnMachineAuth);
             CallbackManager.Subscribe<SteamKit.SteamUser.LoginKeyCallback>(OnLoginKey);
-
-            InternalClient.Connect();
         }
 
         public void Shutdown()
@@ -104,14 +102,14 @@ namespace BytexDigital.Steam.Core
         /// </summary>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <exception cref="SteamClientFaultedException">Client is faulted.</exception>
-        public async Task ConnectAsync(CancellationToken cancellationToken)
+        public async Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             if (_isClientRunning) return;
 
             InternalClient.Connect();
 
             var readyTask = _clientReadyEvent.WaitAsync(cancellationToken);
-            var faultedTask = _clientFaultedEvent.WaitAsync();
+            var faultedTask = _clientFaultedEvent.WaitAsync(cancellationToken);
 
             var task = await Task.WhenAny(readyTask, faultedTask);
 
@@ -128,7 +126,7 @@ namespace BytexDigital.Steam.Core
         public async Task AwaitReadyAsync(CancellationToken cancellationToken)
         {
             var readyTask = _clientReadyEvent.WaitAsync(cancellationToken);
-            var faultedTask = _clientFaultedEvent.WaitAsync();
+            var faultedTask = _clientFaultedEvent.WaitAsync(cancellationToken);
 
             var task = await Task.WhenAny(readyTask, faultedTask);
 
@@ -294,6 +292,8 @@ namespace BytexDigital.Steam.Core
                 {
                     FaultException = new SteamLogonException(callback.Result);
                     _clientFaultedEvent.Set();
+
+                    return;
                 }
 
                 if (callback.Result == EResult.AccountLogonDenied || callback.Result == EResult.AccountLoginDeniedNeedTwoFactor)
