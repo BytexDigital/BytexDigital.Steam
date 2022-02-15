@@ -111,6 +111,7 @@ namespace BytexDigital.Steam.Core
         public async Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             if (_isClientRunning) return;
+            if (_cancellationTokenSource.IsCancellationRequested) throw new SteamClientDisposedException();
 
             InternalClient.Connect();
 
@@ -169,6 +170,9 @@ namespace BytexDigital.Steam.Core
 
         public void Dispose()
         {
+            FaultException ??= new SteamClientDisposedException();
+            _clientFaultedEvent.Set();
+
             _cancellationTokenSource.Cancel();
             InternalClient.Disconnect();
         }
