@@ -109,7 +109,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 filteredFiles = filteredFiles.GroupBy(x => x.FileName).Select(x => x.First());
 
                 // Verify all files in parallel
-                var verificationTaskFactories = filteredFiles.Select(file => new Func<Task>(async () => await Task.Run(() => VerifyFileAsync(file, directory, chunks))));
+                var verificationTaskFactories = filteredFiles.Select(file => new Func<Task>(() => VerifyFileAsync(file, directory, chunks)));
 
                 Logger?.LogTrace($"Verifying files");
 
@@ -142,7 +142,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     .OrderBy(x => x.Key)
                     .SelectMany(x => x);
 
-                var taskFactoriesQueue = sortedChunks.Select(chunkJob => new Func<Task>(async () => await Task.Run(() => DownloadChunkAsync(chunkJob, _cancellationTokenSource.Token)))).ToList();
+                var taskFactoriesQueue = sortedChunks.Select(chunkJob => new Func<Task>(() => DownloadChunkAsync(chunkJob, _cancellationTokenSource.Token))).ToList();
                 var tasksFactoryFailuresLookup = new ConcurrentDictionary<Func<Task>, int>();
 
                 Logger?.LogTrace($"Starting {taskFactoriesQueue.Count} download tasks");
