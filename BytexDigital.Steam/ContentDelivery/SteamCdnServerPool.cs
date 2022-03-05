@@ -160,22 +160,32 @@ namespace BytexDigital.Steam.ContentDelivery
 
         private async Task<string> GetCdnAuthenticationTokenAsync(AppId appId, DepotId depotId, string host, string cdnKey)
         {
+            Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Calling TryGetValue");
+            
             if (_steamContentClient.CdnAuthenticationTokens.TryGetValue(cdnKey, out var response))
             {
+                Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Got existing token");
+                
                 // Check if the token has expired
                 if (response.Expiration - DateTime.Now < TimeSpan.FromMinutes(1))
                 {
+                    Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Existing token was expired");
+                    
                     // Remove from our store and just fetch a new auth token
                     _steamContentClient.CdnAuthenticationTokens.TryRemove(cdnKey, out _);
                 }
                 else
                 {
+                    Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Existing token was valid");
+                    
                     return response.Token;
                 }
             }
 
+            Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Calling GetCDNAuthToken");
             var authResponse = await _steamContentClient.SteamApps.GetCDNAuthToken(appId, depotId, host);
 
+            Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Adding new token token dictionary");
             _steamContentClient.CdnAuthenticationTokens.AddOrUpdate(cdnKey, authResponse, (key, existingValue) => authResponse);
 
             return authResponse.Token;
