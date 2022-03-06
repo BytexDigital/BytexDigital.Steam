@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace BytexDigital.Steam.Core
+﻿namespace BytexDigital.Steam.Core
 {
     public abstract class SteamAuthenticationCodesProvider
     {

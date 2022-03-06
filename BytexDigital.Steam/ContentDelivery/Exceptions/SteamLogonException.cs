@@ -1,16 +1,11 @@
-﻿using SteamKit2;
-
-using System;
+﻿using System;
+using SteamKit2;
 
 namespace BytexDigital.Steam.ContentDelivery.Exceptions
 {
     public class SteamLogonException : Exception
     {
-        public SteamLogonException(EResult result) : base($"Error code: {result}")
-        {
-            Result = result;
-        }
-
         public EResult Result { get; }
+        public SteamLogonException(EResult result) : base($"Error code: {result}") => Result = result;
     }
 }

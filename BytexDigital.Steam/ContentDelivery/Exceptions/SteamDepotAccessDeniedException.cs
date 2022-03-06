@@ -1,6 +1,5 @@
-﻿using BytexDigital.Steam.Core.Structs;
-
-using System;
+﻿using System;
+using BytexDigital.Steam.Core.Structs;
 
 namespace BytexDigital.Steam.ContentDelivery.Exceptions
 {

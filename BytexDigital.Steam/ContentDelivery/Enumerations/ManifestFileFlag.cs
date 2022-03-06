@@ -10,6 +10,6 @@
         Executable = 32,
         Directory = 64,
         CustomExecutable = 128,
-        InstallScript = 256,
+        InstallScript = 256
     }
 }

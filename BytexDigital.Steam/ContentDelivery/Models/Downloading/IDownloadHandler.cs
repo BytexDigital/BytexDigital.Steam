@@ -17,6 +17,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         event EventHandler<EventArgs> DownloadComplete;
 
         Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default);
-        Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default);
+
+        Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition,
+            CancellationToken cancellationToken = default);
     }
 }

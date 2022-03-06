@@ -1,7 +1,6 @@
-﻿using BytexDigital.Steam.Core.Enumerations;
+﻿using System.Collections.Generic;
+using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Structs;
-
-using System.Collections.Generic;
 
 namespace BytexDigital.Steam.ContentDelivery.Models
 {
@@ -14,12 +13,13 @@ namespace BytexDigital.Steam.ContentDelivery.Models
         public ulong MaxSize { get; }
 
         /// <summary>
-        /// Marks if this depot is a shared install. Shared installs are actually part of a different app id. See <see cref="DepotOfAppId"/>.
+        ///     Marks if this depot is a shared install. Shared installs are actually part of a different app id. See
+        ///     <see cref="DepotOfAppId" />.
         /// </summary>
         public bool IsSharedInstall { get; set; }
 
         /// <summary>
-        /// If this depot is a shared install, this is the <see cref="AppId"/> where to look up this depot.
+        ///     If this depot is a shared install, this is the <see cref="AppId" /> where to look up this depot.
         /// </summary>
         public AppId? DepotOfAppId { get; set; }
 

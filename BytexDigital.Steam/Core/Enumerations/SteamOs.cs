@@ -1,4 +1,6 @@
-﻿namespace BytexDigital.Steam.Core.Enumerations
+﻿using System;
+
+namespace BytexDigital.Steam.Core.Enumerations
 {
     public class SteamOs
     {
@@ -8,10 +10,9 @@
 
         public string Identifier { get; }
 
-        public SteamOs(string identifier)
-        {
-            Identifier = identifier ?? throw new System.ArgumentNullException(nameof(identifier), "The OS identifier is not valid.");
-        }
+        public SteamOs(string identifier) =>
+            Identifier = identifier ??
+                         throw new ArgumentNullException(nameof(identifier), "The OS identifier is not valid.");
 
         public static implicit operator SteamOs(string identifier) => new SteamOs(identifier);
 

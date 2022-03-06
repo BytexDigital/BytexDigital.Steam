@@ -15,18 +15,17 @@ namespace BytexDigital.Steam.Core
 
     public class DefaultSteamAuthenticationFilesProvider : SteamAuthenticationFilesProvider
     {
-        private static ConcurrentDictionary<string, byte[]> _sentryFileData = new ConcurrentDictionary<string, byte[]>();
-        private static ConcurrentDictionary<string, string> _loginKeys = new ConcurrentDictionary<string, string>();
+        private static readonly ConcurrentDictionary<string, byte[]> _sentryFileData =
+            new ConcurrentDictionary<string, byte[]>();
 
-        public override string GetLoginKey(SteamCredentials steamCredentials)
-        {
-            return _loginKeys.GetValueOrDefault(steamCredentials.Username, null);
-        }
+        private static readonly ConcurrentDictionary<string, string> _loginKeys =
+            new ConcurrentDictionary<string, string>();
 
-        public override byte[] GetSentryFileContent(SteamCredentials steamCredentials)
-        {
-            return _sentryFileData.GetValueOrDefault(steamCredentials.Username, null);
-        }
+        public override string GetLoginKey(SteamCredentials steamCredentials) =>
+            _loginKeys.GetValueOrDefault(steamCredentials.Username, null);
+
+        public override byte[] GetSentryFileContent(SteamCredentials steamCredentials) =>
+            _sentryFileData.GetValueOrDefault(steamCredentials.Username, null);
 
         public override void SaveLoginKey(SteamCredentials steamCredentials, string loginKey)
         {
@@ -43,42 +42,35 @@ namespace BytexDigital.Steam.Core
     {
         private readonly string _directory;
 
-        public DirectorySteamAuthenticationFilesProvider(string directory)
-        {
-            _directory = directory;
-        }
+        public DirectorySteamAuthenticationFilesProvider(string directory) => _directory = directory;
 
         public override string GetLoginKey(SteamCredentials steamCredentials)
         {
-            string file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.key");
+            var file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.key");
 
             if (!File.Exists(file))
             {
                 return null;
             }
-            else
-            {
-                return File.ReadAllText(file);
-            }
+
+            return File.ReadAllText(file);
         }
 
         public override byte[] GetSentryFileContent(SteamCredentials steamCredentials)
         {
-            string file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.bin");
+            var file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.bin");
 
             if (!File.Exists(file))
             {
                 return null;
             }
-            else
-            {
-                return File.ReadAllBytes(file);
-            }
+
+            return File.ReadAllBytes(file);
         }
 
         public override void SaveLoginKey(SteamCredentials steamCredentials, string loginKey)
         {
-            string file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.key");
+            var file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.key");
 
             Directory.CreateDirectory(_directory);
             File.WriteAllText(file, loginKey);
@@ -86,7 +78,7 @@ namespace BytexDigital.Steam.Core
 
         public override void SaveSentryFileContent(SteamCredentials steamCredentials, byte[] data)
         {
-            string file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.bin");
+            var file = Path.Combine(_directory, $"sentry_{steamCredentials.Username}.bin");
 
             Directory.CreateDirectory(_directory);
             File.WriteAllBytes(file, data);

@@ -6,7 +6,6 @@ namespace BytexDigital.Steam.ContentDelivery.Exceptions
     {
         public SteamGenericErrorException() : base("An error occurred.")
         {
-
         }
     }
 }

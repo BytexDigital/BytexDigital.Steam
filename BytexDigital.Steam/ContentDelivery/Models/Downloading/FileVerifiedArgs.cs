@@ -2,13 +2,13 @@
 {
     public class FileVerifiedArgs
     {
+        public ManifestFile ManifestFile { get; }
+        public bool RequiresDownload { get; }
+
         public FileVerifiedArgs(ManifestFile manifestFile, bool requiresDownload)
         {
             ManifestFile = manifestFile;
             RequiresDownload = requiresDownload;
         }
-
-        public ManifestFile ManifestFile { get; }
-        public bool RequiresDownload { get; }
     }
 }

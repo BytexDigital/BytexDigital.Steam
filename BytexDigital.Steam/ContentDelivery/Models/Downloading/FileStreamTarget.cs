@@ -6,11 +6,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
     public class FileStreamTarget : FileTarget
     {
         public FileStream FileStream { get; }
-
-        public FileStreamTarget(FileStream fileStream)
-        {
-            FileStream = fileStream;
-        }
+        public FileStreamTarget(FileStream fileStream) => FileStream = fileStream;
 
         public override async Task CompleteAsync()
         {
@@ -20,7 +16,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public override async Task WriteAsync(ulong offset, byte[] data)
         {
-            FileStream.Seek((long)offset, SeekOrigin.Begin);
+            FileStream.Seek((long) offset, SeekOrigin.Begin);
             await FileStream.WriteAsync(data, 0, data.Length).ConfigureAwait(false);
         }
 
@@ -36,6 +32,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        public override async ValueTask DisposeAsync() => await CancelAsync();
+        public override async ValueTask DisposeAsync()
+        {
+            await CancelAsync();
+        }
     }
 }
