@@ -24,7 +24,7 @@ public static class Program
         var steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(),
             new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
 
-        var steamContentClient = new SteamContentClient(steamClient, 50);
+        var steamContentClient = new SteamContentClient(steamClient);
 
         steamClient.InternalClientConnected += () => Console.WriteLine("Event: Connected");
         steamClient.InternalClientDisconnected += () => Console.WriteLine("Event: Disconnected");
