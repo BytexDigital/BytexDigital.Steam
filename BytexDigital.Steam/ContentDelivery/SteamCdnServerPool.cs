@@ -25,7 +25,6 @@ namespace BytexDigital.Steam.ContentDelivery
 
         private readonly Task _populatorTask;
 
-        //private readonly ConcurrentStack<Server> _activeServerEndpoints;
         private readonly List<ServerWithRating> _ratedServers;
         private readonly Task _ratingsAnalyzerTask;
         private readonly AsyncLock _serverLock;
@@ -37,7 +36,9 @@ namespace BytexDigital.Steam.ContentDelivery
         public Server DesignatedProxyServer { get; private set; }
         public bool IsExhausted { get; private set; }
 
-        public SteamCdnServerPool(SteamContentClient steamContentClient, AppId appId,
+        public SteamCdnServerPool(
+            SteamContentClient steamContentClient,
+            AppId appId,
             CancellationToken cancellationToken = default)
         {
             _steamContentClient = steamContentClient;
@@ -77,22 +78,21 @@ namespace BytexDigital.Steam.ContentDelivery
             {
                 if (_ratedServers.Count > 0)
                 {
-                    using (var lk = await _serverLock.LockAsync(cancellationToken))
+                    using var lk = await _serverLock.LockAsync(cancellationToken);
+
+                    var random = new Random();
+
+                    var serverWithRating = _ratedServers
+                        .OrderBy(x => x.Rating)
+                        .Take(10)
+                        .OrderBy(x => random.Next())
+                        .FirstOrDefault();
+
+                    if (serverWithRating != null)
                     {
-                        var random = new Random();
+                        server = serverWithRating.Server;
 
-                        var serverWithRating = _ratedServers
-                            .OrderBy(x => x.Rating)
-                            .Take(10)
-                            .OrderBy(x => random.Next())
-                            .FirstOrDefault();
-
-                        if (serverWithRating != null)
-                        {
-                            server = serverWithRating.Server;
-
-                            continue;
-                        }
+                        continue;
                     }
                 }
 
@@ -130,20 +130,19 @@ namespace BytexDigital.Steam.ContentDelivery
 
             if (rating != 0)
             {
-                using (var lk = await _serverLock.LockAsync().ConfigureAwait(false))
+                using var lk = await _serverLock.LockAsync().ConfigureAwait(false);
+
+                var ratings = _serverRatingsHistory.GetOrAdd(server, x => new List<int>());
+
+                ratings.Add(rating);
+
+                if (!_ratedServers.Any(x => x.Server == server))
                 {
-                    var ratings = _serverRatingsHistory.GetOrAdd(server, x => new List<int>());
-
-                    ratings.Add(rating);
-
-                    if (!_ratedServers.Any(x => x.Server == server))
+                    _ratedServers.Add(new ServerWithRating
                     {
-                        _ratedServers.Add(new ServerWithRating
-                        {
-                            Server = server,
-                            Rating = rating
-                        });
-                    }
+                        Server = server,
+                        Rating = rating
+                    });
                 }
             }
         }
@@ -173,7 +172,10 @@ namespace BytexDigital.Steam.ContentDelivery
             return await GetCdnAuthenticationTokenAsync(_appId, depotId, host, cdnKey);
         }
 
-        private async Task<string> GetCdnAuthenticationTokenAsync(AppId appId, DepotId depotId, string host,
+        private async Task<string> GetCdnAuthenticationTokenAsync(
+            AppId appId,
+            DepotId depotId,
+            string host,
             string cdnKey)
         {
             Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Calling TryGetValue");
@@ -204,7 +206,8 @@ namespace BytexDigital.Steam.ContentDelivery
             var authResponse = await _steamContentClient.SteamApps.GetCDNAuthToken(appId, depotId, host);
 
             Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Adding new token token dictionary");
-            _steamContentClient.CdnAuthenticationTokens.AddOrUpdate(cdnKey, authResponse,
+            _steamContentClient.CdnAuthenticationTokens.AddOrUpdate(cdnKey,
+                authResponse,
                 (key, existingValue) => authResponse);
 
             return authResponse.Token;
@@ -250,10 +253,7 @@ namespace BytexDigital.Steam.ContentDelivery
                         })
                         .OrderBy(x => x.WeightedLoad);
 
-                    foreach (var server in sortedServers)
-                    {
-                        _availableServerEndpoints.Add(server);
-                    }
+                    foreach (var server in sortedServers) _availableServerEndpoints.Add(server);
                 }
 
                 Logger?.LogTrace("MonitorAsync: Notifying that pool is populated");

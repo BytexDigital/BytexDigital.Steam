@@ -11,6 +11,7 @@ using BytexDigital.Steam.Core;
 using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Structs;
 using BytexDigital.Steam.Extensions;
+using Nito.AsyncEx;
 using SteamKit2.CDN;
 using SteamKit2.Internal;
 using SteamKit = SteamKit2;
@@ -48,8 +49,13 @@ namespace BytexDigital.Steam.ContentDelivery
             _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(SteamClient.CancellationToken);
         }
 
-        public async Task<Manifest> GetManifestAsync(AppId appId, DepotId depotId, ManifestId manifestId,
-            string branch = null, string branchPassword = null, CancellationToken cancellationToken = default)
+        public async Task<Manifest> GetManifestAsync(
+            AppId appId,
+            DepotId depotId,
+            ManifestId manifestId,
+            string branch = null,
+            string branchPassword = null,
+            CancellationToken cancellationToken = default)
         {
             await SteamClient.AwaitReadyAsync(cancellationToken);
 
@@ -124,7 +130,8 @@ namespace BytexDigital.Steam.ContentDelivery
             cancellationToken.ThrowIfCancellationRequested();
 
             throw new SteamManifestDownloadException(
-                $"Could not download the manifest = {manifestId} after {maxAttempts} attempts.", lastException);
+                $"Could not download the manifest = {manifestId} after {maxAttempts} attempts.",
+                lastException);
         }
 
         public async Task<byte[]> GetDepotKeyAsync(DepotId depotId, AppId appId)
@@ -153,12 +160,15 @@ namespace BytexDigital.Steam.ContentDelivery
             return result.DepotKey;
         }
 
-        public async Task<PublishedFileDetails> GetPublishedFileDetailsAsync(PublishedFileId publishedFileId)
+        public async Task<PublishedFileDetails> GetPublishedFileDetailsAsync(
+            PublishedFileId publishedFileId,
+            CancellationToken cancellationToken = default)
         {
             var request = new CPublishedFile_GetDetails_Request();
             request.publishedfileids.Add(publishedFileId);
 
-            var result = await PublishedFileService.SendMessage(api => api.GetDetails(request));
+            var result = await PublishedFileService.SendMessage(api => api.GetDetails(request)).ToTask()
+                .WaitAsync(cancellationToken);
 
             if (result.Result == SteamKit.EResult.OK)
             {
@@ -171,15 +181,14 @@ namespace BytexDigital.Steam.ContentDelivery
             throw new SteamPublishedFileDetailsFetchException(result.Result);
         }
 
-        public async Task<IList<PublishedFileDetails>> GetPublishedFilesForAppIdRawAsync(AppId appId,
-            CancellationToken? cancellationToken = null)
+        public async Task<IList<PublishedFileDetails>> GetPublishedFilesForAppIdRawAsync(
+            AppId appId,
+            CancellationToken cancellationToken = default)
         {
-            cancellationToken = cancellationToken ?? CancellationToken.None;
-
             var paginationCursor = "*";
             var items = new List<PublishedFileDetails>();
 
-            while (!cancellationToken.Value.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 var requestDetails = new CPublishedFile_QueryFiles_Request
                 {
@@ -200,7 +209,8 @@ namespace BytexDigital.Steam.ContentDelivery
                     return_short_description = true
                 };
 
-                var methodResponse = await PublishedFileService.SendMessage(api => api.QueryFiles(requestDetails));
+                var methodResponse = await PublishedFileService.SendMessage(api => api.QueryFiles(requestDetails))
+                    .ToTask().WaitAsync(cancellationToken);
 
                 var returnedItems = methodResponse.GetDeserializedResponse<CPublishedFile_QueryFiles_Response>();
 
@@ -216,10 +226,15 @@ namespace BytexDigital.Steam.ContentDelivery
             return items;
         }
 
-        public async Task<IDownloadHandler> GetPublishedFileDataAsync(PublishedFileId publishedFileId,
-            ManifestId? manifestId = null, string? branch = null, string? branchPassword = null, SteamOs? os = null)
+        public async Task<IDownloadHandler> GetPublishedFileDataAsync(
+            PublishedFileId publishedFileId,
+            ManifestId? manifestId = null,
+            string? branch = null,
+            string? branchPassword = null,
+            SteamOs? os = null,
+            CancellationToken cancellationToken = default)
         {
-            var publishedFileDetails = await GetPublishedFileDetailsAsync(publishedFileId);
+            var publishedFileDetails = await GetPublishedFileDetailsAsync(publishedFileId, cancellationToken);
 
             if (publishedFileDetails.consumer_appid == 0)
             {
@@ -238,19 +253,33 @@ namespace BytexDigital.Steam.ContentDelivery
                 branch,
                 branchPassword,
                 os,
-                true);
+                true,
+                cancellationToken);
         }
 
-        public async Task<IDownloadHandler> GetAppDataAsync(AppId appId, DepotId depotId, ManifestId? manifestId = null,
-            string branch = "public", string? branchPassword = null, SteamOs? os = null)
+        public async Task<IDownloadHandler> GetAppDataAsync(
+            AppId appId,
+            DepotId depotId,
+            ManifestId? manifestId = null,
+            string branch = "public",
+            string? branchPassword = null,
+            SteamOs? os = null,
+            CancellationToken cancellationToken = default)
         {
             if (!manifestId.HasValue)
             {
-                manifestId = await GetDepotDefaultManifestIdAsync(appId, depotId, branch, branchPassword);
+                manifestId =
+                    await GetDepotDefaultManifestIdAsync(appId, depotId, branch, branchPassword, cancellationToken);
             }
 
-            return await GetAppDataInternalAsync(appId, depotId, manifestId.Value, branch, branchPassword,
-                os ?? SteamClient.GetSteamOs());
+            return await GetAppDataInternalAsync(
+                appId,
+                depotId,
+                manifestId.Value,
+                branch,
+                branchPassword,
+                os ?? SteamClient.GetSteamOs(),
+                cancellationToken: cancellationToken);
         }
 
         public async Task<IReadOnlyList<Depot>> GetDepotsOfBranchAsync(AppId appId, string branch)
@@ -289,19 +318,18 @@ namespace BytexDigital.Steam.ContentDelivery
                 var configEntries = new Dictionary<string, string>();
 
                 foreach (var configEntry in depot["config"].Children)
-                {
                     if (configEntry.Name == "oslist")
                     {
-                        operatingSystems.AddRange(configEntry
-                            .AsString()
-                            .Split(',')
-                            .Select(identifier => new SteamOs(identifier)));
+                        operatingSystems.AddRange(
+                            configEntry
+                                .AsString()
+                                .Split(',')
+                                .Select(identifier => new SteamOs(identifier)));
                     }
                     else
                     {
                         configEntries.Add(configEntry.Name, configEntry.Value);
                     }
-                }
 
                 var manifests = depot["manifests"]
                     .Children
@@ -310,21 +338,39 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 var encryptedManifests = depot["encryptedmanifests"]
                     .Children
-                    .Select(manifest =>
-                    {
-                        if (manifest["encrypted_gid_2"] != SteamKit.KeyValue.Invalid)
+                    .Select(
+                        manifest =>
                         {
-                            return new DepotEncryptedManifest(appId, depotId, manifest.Name,
-                                manifest["encrypted_gid_2"].Value, DepotEncryptedManifest.EncryptionVersion.V2);
-                        }
+                            if (manifest["encrypted_gid_2"] != SteamKit.KeyValue.Invalid)
+                            {
+                                return new DepotEncryptedManifest(
+                                    appId,
+                                    depotId,
+                                    manifest.Name,
+                                    manifest["encrypted_gid_2"].Value,
+                                    DepotEncryptedManifest.EncryptionVersion.V2);
+                            }
 
-                        return new DepotEncryptedManifest(appId, depotId, manifest.Name,
-                            manifest["encrypted_gid"].Value, DepotEncryptedManifest.EncryptionVersion.V1);
-                    })
+                            return new DepotEncryptedManifest(
+                                appId,
+                                depotId,
+                                manifest.Name,
+                                manifest["encrypted_gid"].Value,
+                                DepotEncryptedManifest.EncryptionVersion.V1);
+                        })
                     .ToList();
 
-                parsedDepots.Add(new Depot(depotId, name, maxSize, operatingSystems, manifests, encryptedManifests,
-                    configEntries, isSharedInstall, depotFromApp));
+                parsedDepots.Add(
+                    new Depot(
+                        depotId,
+                        name,
+                        maxSize,
+                        operatingSystems,
+                        manifests,
+                        encryptedManifests,
+                        configEntries,
+                        isSharedInstall,
+                        depotFromApp));
             }
 
             return parsedDepots;
@@ -346,14 +392,20 @@ namespace BytexDigital.Steam.ContentDelivery
                 var requiresPassword = branch["pwdrequired"].AsBoolean();
                 var timeUpdated = branch["timeupdated"].AsLong();
 
-                parsedBranches.Add(new Branch(name, buildid, description, requiresPassword,
-                    DateTimeOffset.FromUnixTimeSeconds(timeUpdated)));
+                parsedBranches.Add(
+                    new Branch(
+                        name,
+                        buildid,
+                        description,
+                        requiresPassword,
+                        DateTimeOffset.FromUnixTimeSeconds(timeUpdated)));
             }
 
             return parsedBranches;
         }
 
-        public async Task<DepotManifest> DecryptDepotManifestAsync(DepotEncryptedManifest manifest,
+        public async Task<DepotManifest> DecryptDepotManifestAsync(
+            DepotEncryptedManifest manifest,
             string branchPassword)
         {
             if (manifest.Version == DepotEncryptedManifest.EncryptionVersion.V1)
@@ -364,7 +416,10 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 if (manifestIdBytes == null)
                 {
-                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName,
+                    throw new SteamInvalidBranchPasswordException(
+                        manifest.AppId,
+                        manifest.DepotId,
+                        manifest.BranchName,
                         branchPassword);
                 }
 
@@ -376,7 +431,10 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 if (!result.BetaPasswords.Any(x => x.Key == manifest.BranchName))
                 {
-                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName,
+                    throw new SteamInvalidBranchPasswordException(
+                        manifest.AppId,
+                        manifest.DepotId,
+                        manifest.BranchName,
                         branchPassword);
                 }
 
@@ -384,25 +442,32 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 try
                 {
-                    var manifestIdBytes = SteamKit.CryptoHelper.SymmetricDecryptECB(manifestCryptoInput,
+                    var manifestIdBytes = SteamKit.CryptoHelper.SymmetricDecryptECB(
+                        manifestCryptoInput,
                         result.BetaPasswords[manifest.BranchName]);
 
                     return new DepotManifest(manifest.BranchName, BitConverter.ToUInt64(manifestIdBytes));
                 }
                 catch (Exception ex)
                 {
-                    throw new SteamInvalidBranchPasswordException(manifest.AppId, manifest.DepotId, manifest.BranchName,
-                        branchPassword, ex);
+                    throw new SteamInvalidBranchPasswordException(
+                        manifest.AppId,
+                        manifest.DepotId,
+                        manifest.BranchName,
+                        branchPassword,
+                        ex);
                 }
             }
         }
 
-#nullable enable
-        public async Task<ManifestId> GetDepotDefaultManifestIdAsync(AppId appId, DepotId depotId,
-            string branch = "public", string? branchPassword = null)
-#nullable disable
+        public async Task<ManifestId> GetDepotDefaultManifestIdAsync(
+            AppId appId,
+            DepotId depotId,
+            string branch = "public",
+            string? branchPassword = null,
+            CancellationToken cancellationToken = default)
         {
-            var appInfo = await GetAppInfoAsync(appId);
+            var appInfo = await GetAppInfoAsync(appId, cancellationToken);
             var depots = appInfo.KeyValues.Children.First(x => x.Name == "depots");
             var depot = depots[depotId.ToString()];
             var manifest = depot["manifests"][branch];
@@ -410,7 +475,11 @@ namespace BytexDigital.Steam.ContentDelivery
 
             if (depot["manifests"] == SteamKit.KeyValue.Invalid && depot["depotfromapp"] != SteamKit.KeyValue.Invalid)
             {
-                return await GetDepotDefaultManifestIdAsync(depot["depotfromapp"].AsUnsignedInteger(), depotId, branch);
+                return await GetDepotDefaultManifestIdAsync(
+                    depot["depotfromapp"].AsUnsignedInteger(),
+                    depotId,
+                    branch,
+                    cancellationToken: cancellationToken);
             }
 
             if (depot == SteamKit.KeyValue.Invalid)
@@ -461,7 +530,8 @@ namespace BytexDigital.Steam.ContentDelivery
                     try
                     {
                         var manifestIdBytes =
-                            SteamKit.CryptoHelper.SymmetricDecryptECB(manifestCryptoInput,
+                            SteamKit.CryptoHelper.SymmetricDecryptECB(
+                                manifestCryptoInput,
                                 result.BetaPasswords[branch]);
 
                         return BitConverter.ToUInt64(manifestIdBytes);
@@ -477,13 +547,19 @@ namespace BytexDigital.Steam.ContentDelivery
                 $"Combination of app id = {appId}, depot id = {depotId} and branch = {branch} could not be found.");
         }
 
-        internal async Task<IDownloadHandler> GetAppDataInternalAsync(AppId appId, DepotId? depotId,
-            ManifestId? manifestId, string branch = "public", string branchPassword = null, SteamOs? os = null,
-            bool isUserGeneratedContent = false)
+        internal async Task<IDownloadHandler> GetAppDataInternalAsync(
+            AppId appId,
+            DepotId? depotId,
+            ManifestId? manifestId,
+            string branch = "public",
+            string branchPassword = null,
+            SteamOs? os = null,
+            bool isUserGeneratedContent = false,
+            CancellationToken cancellationToken = default)
         {
-            if (!await GetHasAccessAsync(appId, depotId))
+            if (!await GetHasAccessAsync(appId, depotId, cancellationToken))
             {
-                var gotFreeLicense = await GetFreeLicenseAsync(appId);
+                var gotFreeLicense = await GetFreeLicenseAsync(appId, cancellationToken);
 
                 if (!gotFreeLicense)
                 {
@@ -491,7 +567,7 @@ namespace BytexDigital.Steam.ContentDelivery
                 }
             }
 
-            var appInfo = await GetAppInfoAsync(appId);
+            var appInfo = await GetAppInfoAsync(appId, cancellationToken);
             var depots = appInfo.KeyValues.Children.First(x => x.Name == "depots");
 
             if (isUserGeneratedContent)
@@ -519,28 +595,45 @@ namespace BytexDigital.Steam.ContentDelivery
 
                     if (!supportedOs.Contains(os.Identifier))
                     {
-                        throw new SteamOsNotSupportedByAppException(appId, depotId.Value, manifestId.Value, os,
+                        throw new SteamOsNotSupportedByAppException(
+                            appId,
+                            depotId.Value,
+                            manifestId.Value,
+                            os,
                             supportedOs);
                     }
                 }
             }
 
 
-            return new MultipleFilesHandler(this,
-                await GetManifestAsync(appId, depotId.Value, manifestId.Value, branch, branchPassword,
-                    CancellationToken), appId, depotId.Value, manifestId.Value);
+            return new MultipleFilesHandler(
+                this,
+                await GetManifestAsync(
+                    appId,
+                    depotId.Value,
+                    manifestId.Value,
+                    branch,
+                    branchPassword,
+                    cancellationToken),
+                appId,
+                depotId.Value,
+                manifestId.Value);
         }
 
-        internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(AppId appId)
+        internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(
+            AppId appId,
+            CancellationToken cancellationToken = default)
         {
-            await RequestAccessTokenIfNecessaryAsync(appId);
+            await RequestAccessTokenIfNecessaryAsync(appId, cancellationToken);
 
-            var result = await GetProductInfoAsync(new List<AppId> {appId}, new List<uint>());
+            var result = await GetProductInfoAsync(new List<AppId> { appId }, new List<uint>(), cancellationToken);
 
             return result.Apps[appId];
         }
 
-        internal async Task RequestAccessTokenIfNecessaryAsync(AppId appId)
+        internal async Task RequestAccessTokenIfNecessaryAsync(
+            AppId appId,
+            CancellationToken cancellationToken = default)
         {
             if (_productAccessKeys.ContainsKey(appId))
             {
@@ -548,61 +641,70 @@ namespace BytexDigital.Steam.ContentDelivery
             }
 
             var accessTokenRequestResult =
-                await SteamApps.PICSGetAccessTokens(new List<uint> {appId}, new List<uint>());
+                await SteamApps.PICSGetAccessTokens(new List<uint> { appId }, new List<uint>()).ToTask()
+                    .WaitAsync(cancellationToken);
 
             if (accessTokenRequestResult.AppTokensDenied.Contains(appId))
             {
                 throw new SteamAppAccessTokenDeniedException(appId);
             }
 
-            _productAccessKeys.AddOrUpdate(appId, accessTokenRequestResult.AppTokens[appId],
+            _productAccessKeys.AddOrUpdate(
+                appId,
+                accessTokenRequestResult.AppTokens[appId],
                 (appId, val) => accessTokenRequestResult.AppTokens[appId]);
         }
 
-        internal async Task<SteamKit.SteamApps.PICSProductInfoCallback> GetProductInfoAsync(List<AppId> appIds,
-            List<uint> packageIds)
+        internal async Task<SteamKit.SteamApps.PICSProductInfoCallback> GetProductInfoAsync(
+            List<AppId> appIds,
+            List<uint> packageIds,
+            CancellationToken cancellationToken = default)
         {
             var appRequests = new List<SteamKit.SteamApps.PICSRequest>();
             var packageRequests = new List<SteamKit.SteamApps.PICSRequest>();
 
             foreach (var appId in appIds)
             {
-                await RequestAccessTokenIfNecessaryAsync(appId);
+                await RequestAccessTokenIfNecessaryAsync(appId, cancellationToken);
 
-                appRequests.Add(new SteamKit.SteamApps.PICSRequest
-                {
-                    ID = appId,
-                    AccessToken = _productAccessKeys[appId]
-                });
+                appRequests.Add(
+                    new SteamKit.SteamApps.PICSRequest
+                    {
+                        ID = appId,
+                        AccessToken = _productAccessKeys[appId]
+                    });
             }
 
             foreach (var packageId in packageIds)
-            {
-                packageRequests.Add(new SteamKit.SteamApps.PICSRequest
-                {
-                    ID = packageId
-                });
-            }
+                packageRequests.Add(
+                    new SteamKit.SteamApps.PICSRequest
+                    {
+                        ID = packageId
+                    });
 
-            var result = await SteamApps.PICSGetProductInfo(appRequests, packageRequests);
+            var result = await SteamApps.PICSGetProductInfo(appRequests, packageRequests).ToTask()
+                .WaitAsync(cancellationToken);
 
             return result.Results.First();
         }
 
-        internal async Task<bool> GetHasAccessAsync(AppId appId, DepotId? depotId)
+        internal async Task<bool> GetHasAccessAsync(
+            AppId appId,
+            DepotId? depotId,
+            CancellationToken cancellationToken = default)
         {
             List<uint> packageIds = null;
 
             if (SteamUser.SteamID.AccountType == SteamKit.EAccountType.AnonUser)
             {
-                packageIds = new List<uint> {17906};
+                packageIds = new List<uint> { 17906 };
             }
             else
             {
                 packageIds = SteamClient.Licenses.Select(x => x.PackageID).ToList();
             }
 
-            var packageInfos = await GetProductInfoAsync(new List<AppId> {appId}, packageIds);
+            var packageInfos = await GetProductInfoAsync(new List<AppId> { appId }, packageIds, cancellationToken);
 
             return packageInfos.Apps.ContainsKey(appId);
 
@@ -625,9 +727,9 @@ namespace BytexDigital.Steam.ContentDelivery
             //return false;
         }
 
-        internal async Task<bool> GetFreeLicenseAsync(AppId appId)
+        internal async Task<bool> GetFreeLicenseAsync(AppId appId, CancellationToken cancellationToken = default)
         {
-            var result = await SteamApps.RequestFreeLicense(appId);
+            var result = await SteamApps.RequestFreeLicense(appId).ToTask().WaitAsync(cancellationToken);
 
             return result.GrantedApps.Contains(appId);
         }
@@ -642,10 +744,7 @@ namespace BytexDigital.Steam.ContentDelivery
             var chars = hex.Length;
             var bytes = new byte[chars / 2];
 
-            for (var i = 0; i < chars; i += 2)
-            {
-                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
-            }
+            for (var i = 0; i < chars; i += 2) bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
 
             return bytes;
         }

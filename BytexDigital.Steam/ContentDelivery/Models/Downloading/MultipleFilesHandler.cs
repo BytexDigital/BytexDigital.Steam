@@ -41,8 +41,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
         public ILogger Logger { get; set; }
 
-        public MultipleFilesHandler(SteamContentClient steamContentClient, Manifest manifest, AppId appId,
-            DepotId depotId, ManifestId manifestId)
+        public MultipleFilesHandler(
+            SteamContentClient steamContentClient,
+            Manifest manifest,
+            AppId appId,
+            DepotId depotId,
+            ManifestId manifestId)
         {
             _steamContentClient = steamContentClient;
 
@@ -77,7 +81,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             await DownloadToFolderAsync(directory, x => true, cancellationToken);
         }
 
-        public async Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition,
+        public async Task DownloadToFolderAsync(
+            string directory,
+            Func<ManifestFile, bool> condition,
             CancellationToken cancellationToken = default)
         {
             await DownloadAsync(directory, condition, cancellationToken);
@@ -99,6 +105,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
             catch
             {
+                // ignored
             }
 
             _serverPool = null;
@@ -109,7 +116,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             DisposeAsync().GetAwaiter().GetResult();
         }
 
-        public async Task DownloadAsync(string directory, Func<ManifestFile, bool> condition,
+        public async Task DownloadAsync(
+            string directory,
+            Func<ManifestFile, bool> condition,
             CancellationToken cancellationToken = default)
         {
             if (IsRunning || _wasUsed)
@@ -212,7 +221,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     // Wait for all file verified eventhandlers to finish so we don't send events out of order
                     await WaitForEventHandlersAsync(_cancellationTokenSource.Token);
 
-                    RunEventHandler(() => DownloadComplete.Invoke(this, new EventArgs()));
+                    RunEventHandler(() => DownloadComplete!.Invoke(this, EventArgs.Empty));
                 }
             }
             finally
@@ -246,8 +255,11 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        private async Task ParallelAsync(int maxParallel, IEnumerable<Func<Task>> taskFactories,
-            Action<Func<Task>, Task> faultedTaskAction, CancellationToken cancellationToken)
+        private async Task ParallelAsync(
+            int maxParallel,
+            IEnumerable<Func<Task>> taskFactories,
+            Action<Func<Task>, Task> faultedTaskAction,
+            CancellationToken cancellationToken)
         {
             var tasksRunning = new List<Task>();
             var tasksFactoryLookup = new Dictionary<Task, Func<Task>>();
@@ -270,10 +282,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     {
                         var oldTask = tasksFactoryLookup.Keys.First(x => x == task);
 
-                        if (oldTask.IsCompleted)
-                        {
-                            tasksFactoryLookup.Remove(oldTask);
-                        }
+                        if (oldTask.IsCompleted) tasksFactoryLookup.Remove(oldTask);
                     }
 
                     tasksFactoryLookup.Add(task, taskFactory);
@@ -355,7 +364,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             _fileWriters.Add(fileWriter);
 
             foreach (var chunk in file.ChunkHeaders)
-            {
                 chunks.Add(new ChunkJob
                 {
                     ManifestFile = file,
@@ -370,7 +378,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                         UncompressedLength = chunk.UncompressedLength
                     }
                 });
-            }
 
             if (FileVerified != null)
             {
@@ -458,7 +465,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             public FileTarget Target { get; }
             public bool IsDone { get; private set; }
 
-            public FileWriter(MultipleFilesHandler handler, ManifestFile manifestFile, FileTarget target,
+            public FileWriter(
+                MultipleFilesHandler handler,
+                ManifestFile manifestFile,
+                FileTarget target,
                 ulong expectedBytes)
             {
                 _handler = handler;
@@ -476,47 +486,41 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             public async Task WriteAsync(ulong offset, byte[] data)
             {
-                using (var semLock = await _writeLock.LockAsync().ConfigureAwait(false))
+                using var semLock = await _writeLock.LockAsync().ConfigureAwait(false);
+
+                if (IsDone) return;
+
+                await Target.WriteAsync(offset, data);
+
+                WrittenBytes += (ulong) data.Length;
+                Target.WrittenBytes = WrittenBytes;
+
+                if (WrittenBytes == ExpectedBytes)
                 {
-                    if (IsDone)
+                    await Target.CompleteAsync().ConfigureAwait(false);
+
+                    IsDone = true;
+
+                    if (_handler.FileDownloaded != null)
                     {
-                        return;
-                    }
-
-                    await Target.WriteAsync(offset, data);
-
-                    WrittenBytes += (ulong) data.Length;
-                    Target.WrittenBytes = WrittenBytes;
-
-                    if (WrittenBytes == ExpectedBytes)
-                    {
-                        await Target.CompleteAsync().ConfigureAwait(false);
-
-                        IsDone = true;
-
-                        if (_handler.FileDownloaded != null)
-                        {
-                            _handler.RunEventHandler(() => _handler.FileDownloaded.Invoke(_handler, ManifestFile));
-                        }
+                        _handler.RunEventHandler(() => _handler.FileDownloaded.Invoke(_handler, ManifestFile));
                     }
                 }
             }
 
             public async Task CancelAsync()
             {
-                var a = new Random().Next(0, 1000);
-
                 try
                 {
-                    using (var semLock = await _writeLock.LockAsync().ConfigureAwait(false))
-                    {
-                        await Target.CancelAsync().ConfigureAwait(false);
+                    using var semLock = await _writeLock.LockAsync().ConfigureAwait(false);
 
-                        IsDone = true;
-                    }
+                    await Target.CancelAsync().ConfigureAwait(false);
+
+                    IsDone = true;
                 }
                 catch
                 {
+                    // ignored
                 }
             }
         }
