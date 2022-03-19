@@ -3,7 +3,7 @@
         <TargetFramework>netstandard2.1</TargetFramework>
 
         <VersionSuffix>$(VersionSuffix)</VersionSuffix>
-        <Version>0.8.1</Version>
+        <Version>0.8.2</Version>
         <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
 
         <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
