@@ -1,9 +1,6 @@
 name: Publish preview
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - preview
 jobs:
   publish:
     name: Publish
