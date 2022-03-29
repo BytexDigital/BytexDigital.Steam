@@ -64,14 +64,25 @@ public static class Program
 
             //var manifestId = await steamContentClient.GetDepotManifestIdAsync(107410, 107422);
             //var depot = await steamContentClient.GetDepotAsync(107410, 1042220);
+
             //var depots = await steamContentClient.GetDepotsAsync(107410, "public", true);
+
+            //await using var handler1 = await steamContentClient
+            //    .GetAppDataAsync(107410, 249503, "public");
+
+            await using var downloadHandler = await steamContentClient
+                .GetAppDataAsync(
+                    233780,
+                    "creatordlc",
+                    depotIdCondition: depot => depot.Id == 233790);
 
             //await using var downloadHandler =
             //    await steamContentClient.GetAppDataAsync(
-            //        107410,
-            //        "public",
+            //        233780,
+            //        "creatordlc",
             //        null,
             //        true);
+
 
             //await using var downloadHandler =
             //    await steamContentClient.GetAppDataAsync(
@@ -81,7 +92,7 @@ public static class Program
             //        true);
 
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2683654050);
-            var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
+            //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2785679828);
 
             Console.WriteLine("Starting download");

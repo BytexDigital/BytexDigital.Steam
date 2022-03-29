@@ -120,7 +120,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 try
                 {
-                    server = await pool.GetServerAsync(cancellationToken);
+                    server = pool.GetServer(cancellationToken);
 
                     var depotKey = await GetDepotKeyAsync(depotId, appId);
 
@@ -147,12 +147,6 @@ namespace BytexDigital.Steam.ContentDelivery
                 {
                     throw;
                 }
-                // catch (SteamKit.SteamKitWebRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized ||
-                //                                                       ex.StatusCode == HttpStatusCode.Forbidden ||
-                //                                                       ex.StatusCode == HttpStatusCode.NotFound)
-                // {
-                //     throw new SteamManifestDownloadException(ex);
-                // }
                 catch (Exception ex)
                 {
                     lastException = ex;
@@ -351,19 +345,15 @@ namespace BytexDigital.Steam.ContentDelivery
             string branch = "public",
             string branchPassword = default,
             bool skipInaccessibleDepots = true,
-            IEnumerable<DepotId> depotIds = default,
+            Func<Depot, bool> depotIdCondition = default,
             CancellationToken cancellationToken = default)
         {
             // Get all depots that are part of the branch
             var depots = await GetDepotsAsync(appId, branch, true, cancellationToken);
 
             // If the user specified a more detailed list of depots to download, filter for them
-            var depotIdsList = depotIds?.ToList();
-
-            if (depotIds != null && depotIdsList.Any())
-            {
-                depots = depots.Where(x => depotIdsList.Contains(x.Id)).ToList();
-            }
+            depotIdCondition ??= x => true;
+            depots = depots.Where(x => depotIdCondition.Invoke(x)).ToList();
 
             if (depots == null)
             {
@@ -376,14 +366,10 @@ namespace BytexDigital.Steam.ContentDelivery
             // For each depot, create an individual download handler that will download that depot
             foreach (var depot in depots)
             {
-                Console.WriteLine($"{depot.Id}: GetHasAccessAsync");
-
                 if (!await GetHasAccessAsync(depot.Id, cancellationToken))
                 {
                     continue;
                 }
-
-                Console.WriteLine($"{depot.Id}: Got HasAccess");
 
                 try
                 {
@@ -428,8 +414,6 @@ namespace BytexDigital.Steam.ContentDelivery
 
                     throw;
                 }
-
-                Console.WriteLine($"{depot.Id}: Got manifest");
             }
 
             return new MultiDepotDownloadHandler(this, multipleFilesHandlers);
@@ -448,7 +432,7 @@ namespace BytexDigital.Steam.ContentDelivery
                 branch,
                 branchPassword,
                 skipInaccessibleDepots,
-                new[] { depotId },
+                x => x.Id == depotId,
                 cancellationToken);
         }
 
