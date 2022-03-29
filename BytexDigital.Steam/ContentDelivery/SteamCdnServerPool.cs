@@ -138,11 +138,12 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 if (!_ratedServers.Any(x => x.Server == server))
                 {
-                    _ratedServers.Add(new ServerWithRating
-                    {
-                        Server = server,
-                        Rating = rating
-                    });
+                    _ratedServers.Add(
+                        new ServerWithRating
+                        {
+                            Server = server,
+                            Rating = rating
+                        });
                 }
             }
         }
@@ -206,7 +207,8 @@ namespace BytexDigital.Steam.ContentDelivery
             var authResponse = await _steamContentClient.SteamApps.GetCDNAuthToken(appId, depotId, host);
 
             Logger?.LogTrace("GetCdnAuthenticationTokenAsync: Adding new token token dictionary");
-            _steamContentClient.CdnAuthenticationTokens.AddOrUpdate(cdnKey,
+            _steamContentClient.CdnAuthenticationTokens.AddOrUpdate(
+                cdnKey,
                 authResponse,
                 (key, existingValue) => authResponse);
 
@@ -244,16 +246,21 @@ namespace BytexDigital.Steam.ContentDelivery
 
                     var sortedServers = servers
                         // Filter out servers that aren't relevant to us or our appid
-                        .Where(server =>
-                        {
-                            var isContentServer = server.Type == "SteamCache" || server.Type == "CDN";
-                            var allowsAppId = server.AllowedAppIds.Length == 0 || server.AllowedAppIds.Contains(_appId);
+                        .Where(
+                            server =>
+                            {
+                                var isContentServer = server.Type == "SteamCache" || server.Type == "CDN";
+                                var allowsAppId = server.AllowedAppIds.Length == 0 ||
+                                                  server.AllowedAppIds.Contains(_appId);
 
-                            return isContentServer && allowsAppId;
-                        })
+                                return isContentServer && allowsAppId;
+                            })
                         .OrderBy(x => x.WeightedLoad);
 
-                    foreach (var server in sortedServers) _availableServerEndpoints.Add(server);
+                    foreach (var server in sortedServers)
+                    {
+                        _availableServerEndpoints.Add(server);
+                    }
                 }
 
                 Logger?.LogTrace("MonitorAsync: Notifying that pool is populated");
@@ -306,20 +313,20 @@ namespace BytexDigital.Steam.ContentDelivery
                 {
                     var cdnServers = await ContentServerDirectoryService.LoadAsync(
                         _steamContentClient.SteamClient.InternalClient.Configuration,
-                        (int) _steamContentClient.SteamClient.SuggestedCellId,
+                        (int) _steamContentClient.SteamClient.ActiveCellId,
                         _cancellationTokenSource.Token);
 
                     if (cdnServers == null)
                     {
-                        continue;
+                        throw new InvalidOperationException(
+                            "ContentServerDirectoryService did not return a list of servers.");
                     }
 
                     return cdnServers;
                 }
                 catch (Exception ex)
                 {
-                    if (ex is SteamKitWebRequestException requestEx &&
-                        requestEx.StatusCode == HttpStatusCode.TooManyRequests)
+                    if (ex is SteamKitWebRequestException { StatusCode: HttpStatusCode.TooManyRequests })
                     {
                         throttleDelay += 5;
 

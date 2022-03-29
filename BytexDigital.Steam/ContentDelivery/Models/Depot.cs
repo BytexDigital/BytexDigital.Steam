@@ -27,7 +27,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models
 
         public IReadOnlyList<DepotManifest> Manifests { get; }
 
-        public IReadOnlyList<DepotEncryptedManifest> EncryptedManifests { get; set; }
+        public IReadOnlyList<DepotEncryptedManifest> EncryptedManifests { get; }
+
+        public IReadOnlyList<string> ProcessorArchitectures { get; }
+        public IReadOnlyList<string> Languages { get; }
 
         public IReadOnlyDictionary<string, string> Config { get; }
 
@@ -36,6 +39,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models
             string name,
             ulong maxSize,
             IReadOnlyList<SteamOs> operatingSystems,
+            IReadOnlyList<string> processorArchitectures,
+            IReadOnlyList<string> languages,
             IReadOnlyList<DepotManifest> manifests,
             IReadOnlyList<DepotEncryptedManifest> encryptedManifests,
             IReadOnlyDictionary<string, string> config,
@@ -48,6 +53,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models
             OperatingSystems = operatingSystems;
             Manifests = manifests;
             EncryptedManifests = encryptedManifests;
+            ProcessorArchitectures = processorArchitectures;
+            Languages = languages;
             Config = config;
             IsSharedInstall = isSharedInstall;
             DepotOfAppId = parentAppId;

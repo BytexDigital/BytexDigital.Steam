@@ -8,5 +8,9 @@ namespace BytexDigital.Steam.ContentDelivery.Exceptions
         public SteamDepotNotFoundException(DepotId depotId) : base($"Depot {depotId} not found.")
         {
         }
+
+        public SteamDepotNotFoundException(string message) : base(message)
+        {
+        }
     }
 }

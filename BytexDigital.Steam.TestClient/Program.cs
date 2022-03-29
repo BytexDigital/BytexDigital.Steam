@@ -15,17 +15,22 @@ public static class Program
         //    return;
         //}
 
-        SteamCredentials steamCredentials;
+        var steamCredentials = SteamCredentials.Anonymous;
 
         steamCredentials = args.Length == 2
             ? new SteamCredentials(args[0], args[1])
             : new SteamCredentials(args[0], args[1], args[2]);
 
-        var steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(),
-            new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
+        var steamClient = new SteamClient(
+            steamCredentials,
+            new AuthCodeProvider(),
+            new DirectorySteamAuthenticationFilesProvider(".\\sentries")); //,
+        //builder => builder.WithCellID(148),
+        //new SteamChinaServerListProvider());
 
-        var steamContentClient = new SteamContentClient(steamClient);
+        var steamContentClient = new SteamContentClient(steamClient, 25);
 
+        steamClient.InternalClientAttemptingConnect += () => Console.WriteLine("Event: Attempting connect..");
         steamClient.InternalClientConnected += () => Console.WriteLine("Event: Connected");
         steamClient.InternalClientDisconnected += () => Console.WriteLine("Event: Disconnected");
         steamClient.InternalClientLoggedOn += () => Console.WriteLine("Event: Logged on");
@@ -49,8 +54,35 @@ public static class Program
             //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
 
             //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
+
+            //await using var downloadHandler =
+            //    await steamContentClient.GetAppDataAsync(107410, 228983, 8124929965194586177);
+
+            //var branches = await steamContentClient.GetBranchesAsync(1280290);
+
+            //var b = await steamContentClient.GetHasAccessAsync(249504);
+
+            //var manifestId = await steamContentClient.GetDepotManifestIdAsync(107410, 107422);
+            //var depot = await steamContentClient.GetDepotAsync(107410, 1042220);
+            //var depots = await steamContentClient.GetDepotsAsync(107410, "public", true);
+
+            //await using var downloadHandler =
+            //    await steamContentClient.GetAppDataAsync(
+            //        107410,
+            //        "public",
+            //        null,
+            //        true);
+
+            //await using var downloadHandler =
+            //    await steamContentClient.GetAppDataAsync(
+            //        107410,
+            //        "profiling",
+            //        "CautionSpecialProfilingAndTestingBranchArma3",
+            //        true);
+
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2683654050);
             var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
+            //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2785679828);
 
             Console.WriteLine("Starting download");
 
@@ -64,8 +96,6 @@ public static class Program
 
             await downloadHandler.DownloadToFolderAsync(
                 @".\download" /*, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token*/);
-
-            await downloadHandler.DisposeAsync();
         }
         catch (Exception ex)
         {
@@ -76,13 +106,6 @@ public static class Program
         Console.WriteLine("Done");
 
         Console.ReadLine();
-
-        while (true)
-        {
-            //steamClient = null;
-            Console.ReadLine();
-            GC.Collect();
-        }
     }
 
     private class AuthCodeProvider : SteamAuthenticationCodesProvider
