@@ -95,6 +95,9 @@ public static class Program
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2785679828);
 
+            var result = await steamContentClient.GetPublishedFileDetailsAsync(
+                new Core.Structs.PublishedFileId[] { 2683654050, 497660133, 2785679828 });
+
             Console.WriteLine("Starting download");
 
             downloadHandler.FileVerified += (sender, args) =>

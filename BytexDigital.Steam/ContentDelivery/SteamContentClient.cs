@@ -224,23 +224,38 @@ namespace BytexDigital.Steam.ContentDelivery
             PublishedFileId publishedFileId,
             CancellationToken cancellationToken = default)
         {
+            var data = (await GetPublishedFileDetailsAsync(new[] { publishedFileId }, cancellationToken))
+                .FirstOrDefault();
+
+            if (data == null)
+            {
+                throw new SteamPublishedFileDetailsFetchException();
+            }
+
+            return data;
+        }
+
+        public async Task<IReadOnlyList<PublishedFileDetails>> GetPublishedFileDetailsAsync(
+            IEnumerable<PublishedFileId> publishedFileIds,
+            CancellationToken cancellationToken = default)
+        {
             var request = new CPublishedFile_GetDetails_Request();
-            request.publishedfileids.Add(publishedFileId);
+
+            publishedFileIds.ToList().ForEach(x => request.publishedfileids.Add(x));
 
             var result = await PublishedFileService.SendMessage(api => api.GetDetails(request))
                 .ToTask()
                 .WaitAsync(cancellationToken);
 
-            if (result.Result == SteamKit.EResult.OK)
+            if (result.Result != SteamKit.EResult.OK)
             {
-                var details = result.GetDeserializedResponse<CPublishedFile_GetDetails_Response>()
-                    .publishedfiledetails
-                    .First();
-
-                return details;
+                throw new SteamPublishedFileDetailsFetchException(result.Result);
             }
 
-            throw new SteamPublishedFileDetailsFetchException(result.Result);
+            var details = result.GetDeserializedResponse<CPublishedFile_GetDetails_Response>()
+                .publishedfiledetails;
+
+            return details;
         }
 
         public async Task<IList<PublishedFileDetails>> GetPublishedFilesForAppIdRawAsync(
