@@ -1,9 +1,14 @@
 ﻿using System;
+using System.Net;
 using System.Threading.Tasks;
 using BytexDigital.Steam.ContentDelivery;
+using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core;
 using BytexDigital.Steam.Core.Regional;
 using BytexDigital.Steam.Core.Structs;
+using SteamKit2;
+using SteamKit2.Discovery;
+using SteamClient = BytexDigital.Steam.Core.SteamClient;
 
 namespace BytexDigital.Steam.TestClient;
 
@@ -30,6 +35,10 @@ public static class Program
             builder => builder.WithCellID(148),
             new SteamChinaServerListProvider());
 
+        steamClient.ForcedServer = ServerRecord.CreateServer(
+            "cm4-cu-sha1.cm.wmsjsteam.com", 27022,
+            ProtocolTypes.WebSocket);
+        
         var steamContentClient = new SteamContentClient(steamClient, 25);
 
         steamClient.InternalClientAttemptingConnect += () => Console.WriteLine("Event: Attempting connect..");
