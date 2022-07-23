@@ -7,6 +7,7 @@ using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core.Exceptions;
 using BytexDigital.Steam.Core.Regional;
 using Nito.AsyncEx;
+using SteamKit2.Discovery;
 using SteamKit = SteamKit2;
 
 namespace BytexDigital.Steam.Core
@@ -22,13 +23,26 @@ namespace BytexDigital.Steam.Core
         private readonly bool _isClientRunning = false;
         internal readonly SteamKit.SteamApps _steamAppsHandler;
         internal readonly SteamKit.SteamContent _steamContentHandler;
-
         internal readonly SteamKit.SteamUser _steamUserHandler;
         internal AsyncManualResetEvent _licensesReceived = new AsyncManualResetEvent(false);
         private int _logonAttemptsCounter;
 
+        /// <summary>
+        /// Credentials that this instance will use to log in after connecting.
+        /// </summary>
         public SteamCredentials Credentials { get; }
+        
+        /// <summary>
+        /// Internal client provided by the SteamKit library.
+        /// </summary>
         public SteamKit.SteamClient InternalClient { get; }
+        
+        /// <summary>
+        /// Server that the client will be forced to connect to.
+        /// <para>If unavailable, the client will attempt reconnecting until a shutdown is forced.</para>
+        /// </summary>
+        public ServerRecord ForcedServer { get; set; }
+        
         public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
         /// <summary>
@@ -165,29 +179,20 @@ namespace BytexDigital.Steam.Core
         /// <exception cref="SteamClientFaultedException">Client is faulted.</exception>
         public async Task ConnectAsync(CancellationToken cancellationToken = default)
         {
-            if (_isClientRunning)
-            {
-                return;
-            }
+            if (_isClientRunning) return;
 
-            if (_cancellationTokenSource.IsCancellationRequested)
-            {
-                throw new SteamClientDisposedException();
-            }
+            if (_cancellationTokenSource.IsCancellationRequested) throw new SteamClientDisposedException();
 
             InternalClientAttemptingConnect?.Invoke();
 
-            InternalClient.Connect();
+            InternalClient.Connect(ForcedServer);
 
             var readyTask = _clientReadyEvent.WaitAsync(cancellationToken);
             var faultedTask = _clientFaultedEvent.WaitAsync(cancellationToken);
 
             var task = await Task.WhenAny(readyTask, faultedTask);
 
-            if (task == faultedTask)
-            {
-                throw new SteamClientFaultedException(FaultException);
-            }
+            if (task == faultedTask) throw new SteamClientFaultedException(FaultException);
 
             // If we are an anonymous user, the callback about owned licenses will not fire.
             if (!Credentials.IsAnonymous)
@@ -217,15 +222,9 @@ namespace BytexDigital.Steam.Core
 
             var task = await Task.WhenAny(readyTask, faultedTask);
 
-            if (task == faultedTask)
-            {
-                throw new SteamClientFaultedException(FaultException);
-            }
+            if (task == faultedTask) throw new SteamClientFaultedException(FaultException);
 
-            if (!readyTask.IsCompletedSuccessfully)
-            {
-                throw new SteamClientNotReadyException();
-            }
+            if (!readyTask.IsCompletedSuccessfully) throw new SteamClientNotReadyException();
         }
 
         private void AttemptLogin()
@@ -238,10 +237,7 @@ namespace BytexDigital.Steam.Core
                 {
                     var data = _authenticationProvider.GetSentryFileContent(Credentials);
 
-                    if (data != null)
-                    {
-                        hash = sha.ComputeHash(data);
-                    }
+                    if (data != null) hash = sha.ComputeHash(data);
                 }
 
                 Task.Run(
@@ -262,17 +258,13 @@ namespace BytexDigital.Steam.Core
                     });
             }
             else
-            {
                 _steamUserHandler.LogOnAnonymous();
-            }
         }
 
         private Task CallbackManagerHandler()
         {
             while (!_cancellationTokenSource.IsCancellationRequested)
-            {
                 CallbackManager.RunWaitAllCallbacks(TimeSpan.FromMilliseconds(10));
-            }
 
             return Task.CompletedTask;
         }
@@ -338,15 +330,9 @@ namespace BytexDigital.Steam.Core
 
             _clientReadyEvent.Reset();
 
-            if (callback.UserInitiated)
-            {
-                return;
-            }
+            if (callback.UserInitiated) return;
 
-            if (CancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+            if (CancellationToken.IsCancellationRequested) return;
 
             _ = Task.Run(
                 async () =>
@@ -363,7 +349,7 @@ namespace BytexDigital.Steam.Core
 
                     InternalClientAttemptingConnect?.Invoke();
 
-                    InternalClient.Connect();
+                    InternalClient.Connect(ForcedServer);
                 });
         }
 
@@ -401,13 +387,9 @@ namespace BytexDigital.Steam.Core
                     callback.Result == SteamKit.EResult.AccountLoginDeniedNeedTwoFactor)
                 {
                     if (callback.Result == SteamKit.EResult.AccountLogonDenied)
-                    {
                         EmailAuthCode = _codesProvider.GetEmailAuthenticationCode(Credentials);
-                    }
                     else
-                    {
                         TwoFactorCode = _codesProvider.GetTwoFactorAuthenticationCode(Credentials);
-                    }
 
                     // By returning, we are releasing the aquired semaphore. This will make the disconnected
                     // callback continue it's execution and attempt a reconnect if our client hasn't been marked

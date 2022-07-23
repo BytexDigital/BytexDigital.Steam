@@ -2,6 +2,8 @@
 using System.Threading.Tasks;
 using BytexDigital.Steam.ContentDelivery;
 using BytexDigital.Steam.Core;
+using BytexDigital.Steam.Core.Regional;
+using BytexDigital.Steam.Core.Structs;
 
 namespace BytexDigital.Steam.TestClient;
 
@@ -9,11 +11,11 @@ public static class Program
 {
     private static async Task Main(string[] args)
     {
-        //if (args.Length < 2)
-        //{
-        //    Console.WriteLine("Expected two arguments: username password");
-        //    return;
-        //}
+        if (args.Length < 2)
+        {
+            Console.WriteLine("Expected two arguments: username password");
+            return;
+        }
 
         var steamCredentials = SteamCredentials.Anonymous;
 
@@ -24,9 +26,9 @@ public static class Program
         var steamClient = new SteamClient(
             steamCredentials,
             new AuthCodeProvider(),
-            new DirectorySteamAuthenticationFilesProvider(".\\sentries")); //,
-        //builder => builder.WithCellID(148),
-        //new SteamChinaServerListProvider());
+            new DirectorySteamAuthenticationFilesProvider(".\\sentries"),
+            builder => builder.WithCellID(148),
+            new SteamChinaServerListProvider());
 
         var steamContentClient = new SteamContentClient(steamClient, 25);
 
@@ -96,7 +98,7 @@ public static class Program
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2785679828);
 
             var result = await steamContentClient.GetPublishedFileDetailsAsync(
-                new Core.Structs.PublishedFileId[] { 2683654050, 497660133, 2785679828 });
+                new PublishedFileId[] { 2683654050, 497660133, 2785679828 });
 
             Console.WriteLine("Starting download");
 

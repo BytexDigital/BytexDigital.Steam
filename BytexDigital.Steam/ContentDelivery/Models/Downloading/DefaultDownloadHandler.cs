@@ -224,10 +224,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
                 var disposeTasks = _fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask()));
 
-                var cancellationTCS = new TaskCompletionSource<object>();
-                _cancellationTokenSource.Token.Register(() => cancellationTCS.TrySetCanceled(), false);
+                var cancellationTcs = new TaskCompletionSource<object>();
+                _cancellationTokenSource.Token.Register(() => cancellationTcs.TrySetCanceled(), false);
 
-                await Task.WhenAny(Task.WhenAll(disposeTasks), cancellationTCS.Task);
+                await Task.WhenAny(Task.WhenAll(disposeTasks), cancellationTcs.Task);
 
 
                 Logger?.LogTrace("Closing server pool");
