@@ -998,15 +998,22 @@ namespace BytexDigital.Steam.ContentDelivery
                     continue;
                 }
 
-                // Fetch live
-                await RequestPackageAccessTokenIfNecessaryAsync(packageId, cancellationToken);
+                try
+                {
+                    // Fetch live
+                    await RequestPackageAccessTokenIfNecessaryAsync(packageId, cancellationToken);
 
-                packageRequests.Add(
-                    new SteamKit.SteamApps.PICSRequest
-                    {
-                        ID = packageId,
-                        AccessToken = _packageAccessTokens[packageId]
-                    });
+                    packageRequests.Add(
+                        new SteamKit.SteamApps.PICSRequest
+                        {
+                            ID = packageId,
+                            AccessToken = _packageAccessTokens[packageId]
+                        });
+                }
+                catch (SteamAccessDeniedException ex)
+                {
+                    // ignored for now
+                }
             }
 
             var result = await SteamApps.PICSGetProductInfo(new List<SteamKit.SteamApps.PICSRequest>(), packageRequests)
@@ -1043,6 +1050,11 @@ namespace BytexDigital.Steam.ContentDelivery
             else
             {
                 packageIds = SteamClient.Licenses.Select(x => x.PackageID).ToList();
+
+                if (!packageIds.Contains(17906))
+                {
+                    packageIds.Add(17906);
+                }
             }
 
             var packageInfos = await GetPackageProductInfoAsync(packageIds, false, cancellationToken);

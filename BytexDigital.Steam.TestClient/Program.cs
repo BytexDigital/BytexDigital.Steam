@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using BytexDigital.Steam.ContentDelivery;
 using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core;
+using BytexDigital.Steam.Core.Enumerations;
 using BytexDigital.Steam.Core.Regional;
 using BytexDigital.Steam.Core.Structs;
 using SteamKit2;
@@ -80,13 +82,17 @@ public static class Program
             //await using var handler1 = await steamContentClient
             //    .GetAppDataAsync(107410, 249503, "public");
 
-            var manifestIdYee = await steamContentClient.GetDepotManifestIdAsync(233780, 233790, branch: "creatordlc");
+            SteamOs steamOs = new("win");
+            ManifestId manifestId;
+
+            manifestId = await steamContentClient.GetDepotManifestIdAsync(233780, 233781, "public");
+            var downloadHandler = await steamContentClient.GetAppDataAsync(233780, 233781, manifestId);
             
-            await using var downloadHandler = await steamContentClient
-                .GetAppDataAsync(
-                    233780,
-                    "creatordlc",
-                    depotIdCondition: depot => depot.Id == 233790);
+            // await using var downloadHandler = await steamContentClient
+            //     .GetAppDataAsync(
+            //         233780,
+            //         "public",
+            //         depotIdCondition: depot => depot.Id == 233781 || depot.Id == 233782);
 
             //await using var downloadHandler =
             //    await steamContentClient.GetAppDataAsync(
@@ -107,8 +113,8 @@ public static class Program
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
             //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2785679828);
 
-            var result = await steamContentClient.GetPublishedFileDetailsAsync(
-                new PublishedFileId[] { 2683654050, 497660133, 2785679828 });
+            // var result = await steamContentClient.GetPublishedFileDetailsAsync(
+            //     new PublishedFileId[] { 2683654050, 497660133, 2785679828 });
 
             Console.WriteLine("Starting download");
 
