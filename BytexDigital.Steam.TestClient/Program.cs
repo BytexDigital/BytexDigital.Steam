@@ -61,59 +61,11 @@ public static class Program
 
         try
         {
-            //var depots = await steamContentClient.GetDepotsAsync(107410);
-            //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
-
-            //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
-
-            //await using var downloadHandler =
-            //    await steamContentClient.GetAppDataAsync(107410, 228983, 8124929965194586177);
-
-            //var branches = await steamContentClient.GetBranchesAsync(1280290);
-
-            //var b = await steamContentClient.GetHasAccessAsync(249504);
-
-            //var manifestId = await steamContentClient.GetDepotManifestIdAsync(107410, 107422);
-            //var depot = await steamContentClient.GetDepotAsync(107410, 1042220);
-
-            //var depots = await steamContentClient.GetDepotsAsync(107410, "public", true);
-
-            //await using var handler1 = await steamContentClient
-            //    .GetAppDataAsync(107410, 249503, "public");
-
-            SteamOs steamOs = new("win");
-            ManifestId manifestId;
-
-            manifestId = await steamContentClient.GetDepotManifestIdAsync(233780, 233781, "public");
-            var downloadHandler = await steamContentClient.GetAppDataAsync(233780, 233781, manifestId);
-            
-            // await using var downloadHandler = await steamContentClient
-            //     .GetAppDataAsync(
-            //         233780,
-            //         "public",
-            //         depotIdCondition: depot => depot.Id == 233781 || depot.Id == 233782);
-
-            //await using var downloadHandler =
-            //    await steamContentClient.GetAppDataAsync(
-            //        233780,
-            //        "creatordlc",
-            //        null,
-            //        true);
-
-
-            //await using var downloadHandler =
-            //    await steamContentClient.GetAppDataAsync(
-            //        107410,
-            //        "profiling",
-            //        "CautionSpecialProfilingAndTestingBranchArma3",
-            //        true);
-
-            //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2683654050);
-            //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
-            //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2785679828);
-
-            // var result = await steamContentClient.GetPublishedFileDetailsAsync(
-            //     new PublishedFileId[] { 2683654050, 497660133, 2785679828 });
+            await using var downloadHandler = await steamContentClient
+                .GetAppDataAsync(
+                    233780,
+                    "public",
+                    depotIdCondition: depot => true /* download all depots of branch */);
 
             Console.WriteLine("Starting download");
 

@@ -58,11 +58,6 @@ namespace BytexDigital.Steam.Core
         public uint ActiveCellId { get; private set; }
         public Exception FaultException { get; private set; }
 
-        /// <summary>
-        /// Event handler that fires upon exception that are produced by user code.
-        /// </summary>
-        public event EventHandler<Exception> OnUnhandledException; 
-
         internal SteamKit.CallbackManager CallbackManager { get; set; }
         internal IList<SteamKit.SteamApps.LicenseListCallback.License> Licenses { get; set; }
 
@@ -144,6 +139,11 @@ namespace BytexDigital.Steam.Core
             _cancellationTokenSource.Cancel();
             InternalClient.Disconnect();
         }
+
+        /// <summary>
+        ///     Event handler that fires upon exception that are produced by user code.
+        /// </summary>
+        public event EventHandler<Exception> OnUnhandledException;
 
         public event Action InternalClientAttemptingConnect;
         public event Action InternalClientConnected;
@@ -230,7 +230,7 @@ namespace BytexDigital.Steam.Core
                     {
                         _logonAttemptsCounter++;
                         var accessToken = string.Empty;
-                        
+
                         try
                         {
                             accessToken =
@@ -241,7 +241,7 @@ namespace BytexDigital.Steam.Core
                                 var guardData = await _steamAuthenticator.GetGuardDataAsync(
                                     _cancellationTokenSource
                                         .Token);
-                                
+
                                 // Begin authenticating via credentials
                                 var authSession = await InternalClient.Authentication
                                     .BeginAuthSessionViaCredentialsAsync(
@@ -261,15 +261,19 @@ namespace BytexDigital.Steam.Core
 
                                 await _steamAuthenticator.PersistAccessTokenAsync(accessToken,
                                     _cancellationTokenSource.Token);
-                                await _steamAuthenticator.PersistGuardDataAsync(pollResponse.NewGuardData,
-                                    _cancellationTokenSource.Token);
+
+                                if (!string.IsNullOrEmpty(pollResponse.NewGuardData))
+                                {
+                                    await _steamAuthenticator.PersistGuardDataAsync(pollResponse.NewGuardData,
+                                        _cancellationTokenSource.Token);
+                                }
                             }
                         }
                         catch (Exception ex)
                         {
                             OnUnhandledException?.Invoke(this, ex);
                         }
-                        
+
                         _steamUserHandler.LogOn(
                             new SteamKit.SteamUser.LogOnDetails
                             {
