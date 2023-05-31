@@ -1,7 +1,16 @@
 ﻿using System;
+using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using BytexDigital.Steam.ContentDelivery;
+using BytexDigital.Steam.ContentDelivery.Exceptions;
 using BytexDigital.Steam.Core;
+using BytexDigital.Steam.Core.Enumerations;
+using BytexDigital.Steam.Core.Regional;
+using BytexDigital.Steam.Core.Structs;
+using SteamKit2;
+using SteamKit2.Discovery;
+using SteamClient = BytexDigital.Steam.Core.SteamClient;
 
 namespace BytexDigital.Steam.TestClient;
 
@@ -9,23 +18,30 @@ public static class Program
 {
     private static async Task Main(string[] args)
     {
-        //if (args.Length < 2)
-        //{
-        //    Console.WriteLine("Expected two arguments: username password");
-        //    return;
-        //}
+        if (args.Length < 2)
+        {
+            Console.WriteLine("Expected two arguments: username password");
+            return;
+        }
 
-        SteamCredentials steamCredentials;
+        var steamCredentials = SteamCredentials.Anonymous;
 
         steamCredentials = args.Length == 2
             ? new SteamCredentials(args[0], args[1])
             : new SteamCredentials(args[0], args[1], args[2]);
 
-        var steamClient = new SteamClient(steamCredentials, new AuthCodeProvider(),
-            new DirectorySteamAuthenticationFilesProvider(".\\sentries"));
+        var steamClient = new SteamClient(
+            steamCredentials,
+            new ConsoleSteamAuthenticator(steamCredentials.Username, ".\\auth"),
+            builder => builder.WithCellID(148));
 
-        var steamContentClient = new SteamContentClient(steamClient);
+        // steamClient.ForcedServer = ServerRecord.CreateServer(
+        //     "cm4-cu-sha1.cm.wmsjsteam.com", 27022,
+        //     ProtocolTypes.WebSocket);
+        
+        var steamContentClient = new SteamContentClient(steamClient, 25);
 
+        steamClient.InternalClientAttemptingConnect += () => Console.WriteLine("Event: Attempting connect..");
         steamClient.InternalClientConnected += () => Console.WriteLine("Event: Connected");
         steamClient.InternalClientDisconnected += () => Console.WriteLine("Event: Disconnected");
         steamClient.InternalClientLoggedOn += () => Console.WriteLine("Event: Logged on");
@@ -45,12 +61,11 @@ public static class Program
 
         try
         {
-            //var depots = await steamContentClient.GetDepotsAsync(107410);
-            //var publicDepots = await steamContentClient.GetDepotsOfBranchAsync(107410, "public");
-
-            //await using var downloadHandler = await steamContentClient.GetAppDataAsync(107410, 228990, null, "public", null, SteamOs.Windows);
-            //var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(2683654050);
-            var downloadHandler = await steamContentClient.GetPublishedFileDataAsync(497660133);
+            await using var downloadHandler = await steamContentClient
+                .GetAppDataAsync(
+                    233780,
+                    "public",
+                    depotIdCondition: depot => true /* download all depots of branch */);
 
             Console.WriteLine("Starting download");
 
@@ -64,8 +79,6 @@ public static class Program
 
             await downloadHandler.DownloadToFolderAsync(
                 @".\download" /*, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token*/);
-
-            await downloadHandler.DisposeAsync();
         }
         catch (Exception ex)
         {
@@ -76,37 +89,5 @@ public static class Program
         Console.WriteLine("Done");
 
         Console.ReadLine();
-
-        while (true)
-        {
-            //steamClient = null;
-            Console.ReadLine();
-            GC.Collect();
-        }
-    }
-
-    private class AuthCodeProvider : SteamAuthenticationCodesProvider
-    {
-        public override string GetEmailAuthenticationCode(SteamCredentials steamCredentials)
-        {
-            Console.Write("Please enter your email auth code: ");
-
-            var input = Console.ReadLine();
-
-            Console.Write("Retrying... ");
-
-            return input;
-        }
-
-        public override string GetTwoFactorAuthenticationCode(SteamCredentials steamCredentials)
-        {
-            Console.Write("Please enter your 2FA code: ");
-
-            var input = Console.ReadLine();
-
-            Console.Write("Retrying... ");
-
-            return input;
-        }
     }
 }

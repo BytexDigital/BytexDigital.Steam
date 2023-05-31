@@ -8,12 +8,12 @@ using System.Threading.Tasks;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
-    public class DirectFileHandler : IDownloadHandler
+    public class LegacyDownloadHandler : IDownloadHandler
     {
         public string FileUrl { get; }
         public string FileName { get; }
 
-        public DirectFileHandler(string fileUrl, string fileName)
+        public LegacyDownloadHandler(string fileUrl, string fileName)
         {
             FileUrl = fileUrl;
             FileName = fileName;
@@ -29,9 +29,13 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public event EventHandler<VerificationCompletedArgs> VerificationCompleted;
         public event EventHandler<EventArgs> DownloadComplete;
 
-        public Task DownloadToFolderAsync(string directory, Func<ManifestFile, bool> condition,
-            CancellationToken cancellationToken = default) =>
-            DownloadToFolderAsync(directory, cancellationToken);
+        public Task DownloadToFolderAsync(
+            string directory,
+            Func<ManifestFile, bool> condition,
+            CancellationToken cancellationToken = default)
+        {
+            return DownloadToFolderAsync(directory, cancellationToken);
+        }
 
         public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
         {
@@ -59,7 +63,10 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
         }
 
-        public ValueTask DisposeAsync() => new ValueTask(Task.CompletedTask);
+        public ValueTask DisposeAsync()
+        {
+            return new ValueTask(Task.CompletedTask);
+        }
 
         public void Dispose()
         {
@@ -73,10 +80,15 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 
             if (FileDownloaded != null)
             {
-                _ = Task.Run(() => FileDownloaded.Invoke(this, new ManifestFile(
-                    FileName,
-                    new List<ManifestFileChunkHeader>(),
-                    default, TotalFileSize, new byte[0])));
+                _ = Task.Run(
+                    () => FileDownloaded.Invoke(
+                        this,
+                        new ManifestFile(
+                            FileName,
+                            new List<ManifestFileChunkHeader>(),
+                            default,
+                            TotalFileSize,
+                            new byte[0])));
             }
         }
 

@@ -9,5 +9,10 @@ namespace BytexDigital.Steam.ContentDelivery.Exceptions
             $"Could not download published file details: {result}")
         {
         }
+
+        public SteamPublishedFileDetailsFetchException() : base(
+            $"Could not download published file details.")
+        {
+        }
     }
 }
