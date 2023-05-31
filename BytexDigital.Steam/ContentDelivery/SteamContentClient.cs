@@ -130,10 +130,12 @@ namespace BytexDigital.Steam.ContentDelivery
                     //if (!_manifestRequestCodes.TryGetValue(manifestId., )
 
                     var manifestCode =
-                        await SteamClient._steamContentHandler.GetManifestRequestCode(depotId, appId, manifestId);
+                        await SteamClient._steamContentHandler.GetManifestRequestCode(depotId, appId, manifestId)
+                            .WaitAsync(cancellationToken);
 
                     var manifest =
-                        await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, manifestCode, server, depotKey);
+                        await pool.CdnClient.DownloadManifestAsync(depotId, manifestId, manifestCode, server, depotKey)
+                            .WaitAsync(cancellationToken);
 
 
                     if (manifest.FilenamesEncrypted)
@@ -344,7 +346,7 @@ namespace BytexDigital.Steam.ContentDelivery
             if (!manifestId.HasValue || manifestId.Value == 0)
             {
                 throw new SteamAccessDeniedException(
-                    $"Cannot download workshop item because no manifest id was found (Maybe you don't have access to this workshop).");
+                    "Cannot download workshop item because no manifest id was found (Maybe you don't have access to this workshop).");
             }
 
             return await GetAppDataInternalAsync(
@@ -373,7 +375,7 @@ namespace BytexDigital.Steam.ContentDelivery
             if (depots == null)
             {
                 throw new SteamDownloadCriteriaHaveNoResultException(
-                    $"No depot to download found that matches the criteria.");
+                    "No depot to download found that matches the criteria.");
             }
 
             var multipleFilesHandlers = new List<DefaultDownloadHandler>();
@@ -483,7 +485,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
             var appInfo = await GetAppInfoAsync(appId, cancellationToken);
             var allDepotData = appInfo.KeyValues.Children.First(x => x.Name == "depots");
-            var filteredDepotData = new List<SteamKit2.KeyValue>();
+            var filteredDepotData = new List<SteamKit.KeyValue>();
             var parsedDepots = new List<Depot>();
 
             foreach (var depotData in allDepotData.Children)
@@ -572,7 +574,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 var manifests = depot["manifests"]
                     .Children
-                    .Select(x => new DepotManifest(x.Name, x.AsUnsignedLong()))
+                    .Select(x => new DepotManifest(x.Name, x["gid"].AsUnsignedLong()))
                     .ToList();
 
                 var encryptedManifests = depot["encryptedmanifests"]
@@ -785,7 +787,7 @@ namespace BytexDigital.Steam.ContentDelivery
             if (depot == null)
             {
                 throw new SteamDownloadCriteriaHaveNoResultException(
-                    $"No manifest could be found that matches all specified criteria.");
+                    "No manifest could be found that matches all specified criteria.");
             }
 
             if (depot.IsSharedInstall)
@@ -1021,7 +1023,7 @@ namespace BytexDigital.Steam.ContentDelivery
         }
 
         /// <summary>
-        /// Checks whether the signed in user has access to the given ID. Can be either an app ID or a depot ID.
+        ///     Checks whether the signed in user has access to the given ID. Can be either an app ID or a depot ID.
         /// </summary>
         /// <param name="id">App ID or depot ID.</param>
         /// <param name="cancellationToken"></param>

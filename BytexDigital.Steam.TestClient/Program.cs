@@ -32,12 +32,11 @@ public static class Program
             steamCredentials,
             new AuthCodeProvider(),
             new DirectorySteamAuthenticationFilesProvider(".\\sentries"),
-            builder => builder.WithCellID(148),
-            new SteamChinaServerListProvider());
+            builder => builder.WithCellID(148));
 
-        steamClient.ForcedServer = ServerRecord.CreateServer(
-            "cm4-cu-sha1.cm.wmsjsteam.com", 27022,
-            ProtocolTypes.WebSocket);
+        // steamClient.ForcedServer = ServerRecord.CreateServer(
+        //     "cm4-cu-sha1.cm.wmsjsteam.com", 27022,
+        //     ProtocolTypes.WebSocket);
         
         var steamContentClient = new SteamContentClient(steamClient, 25);
 
@@ -81,6 +80,8 @@ public static class Program
             //await using var handler1 = await steamContentClient
             //    .GetAppDataAsync(107410, 249503, "public");
 
+            var manifestIdYee = await steamContentClient.GetDepotManifestIdAsync(233780, 233790, branch: "creatordlc");
+            
             await using var downloadHandler = await steamContentClient
                 .GetAppDataAsync(
                     233780,

@@ -54,15 +54,16 @@ namespace BytexDigital.Steam.Core
         ///     Indicates whether the client is faulted. See <see cref="FaultReason" /> for more information.
         /// </summary>
         public bool IsFaulted => FaultException != null;
-
-        public string TwoFactorCode { get; set; }
-        public string EmailAuthCode { get; private set; }
+        
         public int MaximumLogonAttempts { get; set; } = 1;
         public uint ActiveCellId { get; private set; }
         public Exception FaultException { get; private set; }
 
         internal SteamKit.CallbackManager CallbackManager { get; set; }
         internal IList<SteamKit.SteamApps.LicenseListCallback.License> Licenses { get; set; }
+
+        protected string _twoFactorCode;
+        protected string _emailCode;
 
         public SteamClient(SteamCredentials credentials = default) : this(
             credentials,
@@ -248,11 +249,11 @@ namespace BytexDigital.Steam.Core
                             {
                                 Username = Credentials.Username,
                                 Password = Credentials.Password,
-                                TwoFactorCode = TwoFactorCode,
-                                AuthCode = EmailAuthCode,
+                                TwoFactorCode = _twoFactorCode,
+                                AuthCode = _emailCode,
                                 SentryFileHash = hash,
                                 LoginKey = _authenticationProvider.GetLoginKey(Credentials),
-                                ShouldRememberPassword = true,
+                                ShouldRememberPassword = _authenticationProvider.ShouldRememberMe(Credentials),
                                 LoginID = (uint) new Random().Next(100000000, 999999999)
                             });
                     });
@@ -387,9 +388,9 @@ namespace BytexDigital.Steam.Core
                     callback.Result == SteamKit.EResult.AccountLoginDeniedNeedTwoFactor)
                 {
                     if (callback.Result == SteamKit.EResult.AccountLogonDenied)
-                        EmailAuthCode = _codesProvider.GetEmailAuthenticationCode(Credentials);
+                        _emailCode = _codesProvider.GetEmailAuthenticationCode(Credentials);
                     else
-                        TwoFactorCode = _codesProvider.GetTwoFactorAuthenticationCode(Credentials);
+                        _twoFactorCode = _codesProvider.GetTwoFactorAuthenticationCode(Credentials);
 
                     // By returning, we are releasing the aquired semaphore. This will make the disconnected
                     // callback continue it's execution and attempt a reconnect if our client hasn't been marked

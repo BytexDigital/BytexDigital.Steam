@@ -11,6 +11,8 @@ namespace BytexDigital.Steam.Core
 
         public abstract string? GetLoginKey(SteamCredentials steamCredentials);
         public abstract void SaveLoginKey(SteamCredentials steamCredentials, string loginKey);
+        
+        public abstract bool ShouldRememberMe(SteamCredentials steamCredentials);
     }
 
     public class DefaultSteamAuthenticationFilesProvider : SteamAuthenticationFilesProvider
@@ -30,6 +32,11 @@ namespace BytexDigital.Steam.Core
         public override void SaveLoginKey(SteamCredentials steamCredentials, string loginKey)
         {
             _loginKeys.AddOrUpdate(steamCredentials.Username, key => loginKey, (key, existingValue) => loginKey);
+        }
+
+        public override bool ShouldRememberMe(SteamCredentials steamCredentials)
+        {
+            return true;
         }
 
         public override void SaveSentryFileContent(SteamCredentials steamCredentials, byte[] data)
@@ -74,6 +81,11 @@ namespace BytexDigital.Steam.Core
 
             Directory.CreateDirectory(_directory);
             File.WriteAllText(file, loginKey);
+        }
+
+        public override bool ShouldRememberMe(SteamCredentials steamCredentials)
+        {
+            return true;
         }
 
         public override void SaveSentryFileContent(SteamCredentials steamCredentials, byte[] data)
