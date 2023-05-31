@@ -32,8 +32,7 @@ public static class Program
 
         var steamClient = new SteamClient(
             steamCredentials,
-            new AuthCodeProvider(),
-            new DirectorySteamAuthenticationFilesProvider(".\\sentries"),
+            new ConsoleSteamAuthenticator(steamCredentials.Username, ".\\auth"),
             builder => builder.WithCellID(148));
 
         // steamClient.ForcedServer = ServerRecord.CreateServer(
@@ -138,30 +137,5 @@ public static class Program
         Console.WriteLine("Done");
 
         Console.ReadLine();
-    }
-
-    private class AuthCodeProvider : SteamAuthenticationCodesProvider
-    {
-        public override string GetEmailAuthenticationCode(SteamCredentials steamCredentials)
-        {
-            Console.Write("Please enter your email auth code: ");
-
-            var input = Console.ReadLine();
-
-            Console.Write("Retrying... ");
-
-            return input;
-        }
-
-        public override string GetTwoFactorAuthenticationCode(SteamCredentials steamCredentials)
-        {
-            Console.Write("Please enter your 2FA code: ");
-
-            var input = Console.ReadLine();
-
-            Console.Write("Retrying... ");
-
-            return input;
-        }
     }
 }
