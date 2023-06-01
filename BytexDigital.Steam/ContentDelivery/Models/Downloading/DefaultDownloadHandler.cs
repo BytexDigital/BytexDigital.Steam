@@ -69,7 +69,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 var totalBytes = _fileTargets.Sum(x => (long) x.Value.TotalBytes);
                 var currentBytes = _fileTargets.Sum(x => (long) x.Value.WrittenBytes);
 
-                return (double) currentBytes / (totalBytes > 0 ? totalBytes : 1);
+                return totalBytes > 0 ? (double) currentBytes / totalBytes : 1;
             }
         }
 
@@ -148,7 +148,22 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                 // Filter out files that are directories or that the caller does not want
                 IEnumerable<ManifestFile> filteredFiles = Manifest.Files
                     .Where(file => file.Flags != ManifestFileFlag.Directory && condition.Invoke(file))
-                    .OrderBy(x => x.FileName);
+                    .OrderBy(x => x.FileName)
+                    .ToList();
+
+                if (!filteredFiles.Any())
+                {
+                    Logger?.LogTrace("No files to download");
+
+                    if (DownloadComplete != null)
+                    {
+                        // Wait for all file verified eventhandlers to finish so we don't send events out of order
+                        await WaitForEventHandlersAsync(_cancellationTokenSource.Token);
+
+                        RunEventHandler(() => DownloadComplete!.Invoke(this, EventArgs.Empty));
+                        return;
+                    }
+                }
 
                 // Filter all files that are possible duplicates
                 filteredFiles = filteredFiles.GroupBy(x => x.FileName).Select(x => x.First());
@@ -220,16 +235,17 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
             }
             finally
             {
-                Logger?.LogTrace("Disposing all file writers");
+                if (_fileWriters.Count > 0) {
+                    Logger?.LogTrace("Disposing all file writers");
 
-                var disposeTasks = _fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask()));
+                    var disposeTasks = _fileWriters.Select(x => Task.Run(async () => await x.DisposeAsync().AsTask()));
 
-                var cancellationTcs = new TaskCompletionSource<object>();
-                _cancellationTokenSource.Token.Register(() => cancellationTcs.TrySetCanceled(), false);
+                    var cancellationTcs = new TaskCompletionSource<object>();
+                    _cancellationTokenSource.Token.Register(() => cancellationTcs.TrySetCanceled(), false);
 
-                await Task.WhenAny(Task.WhenAll(disposeTasks), cancellationTcs.Task);
-
-
+                    await Task.WhenAny(Task.WhenAll(disposeTasks), cancellationTcs.Task);
+                }
+                
                 Logger?.LogTrace("Closing server pool");
                 _serverPool?.Close();
 

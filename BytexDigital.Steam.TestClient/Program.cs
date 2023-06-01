@@ -32,8 +32,7 @@ public static class Program
 
         var steamClient = new SteamClient(
             steamCredentials,
-            new ConsoleSteamAuthenticator(steamCredentials.Username, ".\\auth"),
-            builder => builder.WithCellID(148));
+            new ConsoleSteamAuthenticator(steamCredentials.Username, ".\\auth"));
 
         // steamClient.ForcedServer = ServerRecord.CreateServer(
         //     "cm4-cu-sha1.cm.wmsjsteam.com", 27022,

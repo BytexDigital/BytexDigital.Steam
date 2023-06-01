@@ -82,7 +82,7 @@ namespace BytexDigital.Steam.Core
         public string AccessToken { get; protected set; }
         public string GuardData { get; protected set; }
 
-        public ConsoleSteamAuthenticator(string uniqueStorageName, string persistenceDirectory)
+        public ConsoleSteamAuthenticator(string uniqueStorageName, string persistenceDirectory = default)
         {
             _uniqueStorageName = uniqueStorageName;
             _persistenceDirectory = persistenceDirectory;
