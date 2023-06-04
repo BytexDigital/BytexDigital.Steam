@@ -161,8 +161,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                         await WaitForEventHandlersAsync(_cancellationTokenSource.Token);
 
                         RunEventHandler(() => DownloadComplete!.Invoke(this, EventArgs.Empty));
-                        return;
                     }
+                    
+                    return;
                 }
 
                 // Filter all files that are possible duplicates

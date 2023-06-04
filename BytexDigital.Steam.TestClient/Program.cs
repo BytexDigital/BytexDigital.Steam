@@ -77,7 +77,7 @@ public static class Program
             downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
             await downloadHandler.DownloadToFolderAsync(
-                @".\download" /*, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token*/);
+                @".\download", file => false);
         }
         catch (Exception ex)
         {
