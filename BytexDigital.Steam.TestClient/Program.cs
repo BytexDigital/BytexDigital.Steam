@@ -62,9 +62,8 @@ public static class Program
         {
             await using var downloadHandler = await steamContentClient
                 .GetAppDataAsync(
-                    233780,
-                    "public",
-                    depotIdCondition: depot => true /* download all depots of branch */);
+                    107410,
+                    107422);
 
             Console.WriteLine("Starting download");
 
@@ -77,7 +76,7 @@ public static class Program
             downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
             await downloadHandler.DownloadToFolderAsync(
-                @".\download", file => false);
+                @".\download", file => true);
         }
         catch (Exception ex)
         {

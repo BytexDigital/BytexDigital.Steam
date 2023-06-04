@@ -334,7 +334,7 @@ namespace BytexDigital.Steam.ContentDelivery
             if (!await GetHasAccessAsync(publishedFileDetails.consumer_appid, cancellationToken))
             {
                 var gotFreeLicense = await GetFreeLicenseAsync(publishedFileDetails.consumer_appid, cancellationToken);
-
+            
                 if (!gotFreeLicense)
                 {
                     throw new SteamRequiredLicenseNotFoundException(publishedFileDetails.consumer_appid);
@@ -385,7 +385,7 @@ namespace BytexDigital.Steam.ContentDelivery
             {
                 if (!await GetHasAccessAsync(depot.Id, cancellationToken))
                 {
-                    continue;
+                    throw new SteamDepotAccessDeniedException(depot.Id);
                 }
 
                 try
@@ -838,7 +838,7 @@ namespace BytexDigital.Steam.ContentDelivery
 
                 if (!gotFreeLicense)
                 {
-                    throw new SteamRequiredLicenseNotFoundException(appId);
+                    throw new SteamDepotAccessDeniedException(depotId);
                 }
             }
 
@@ -904,29 +904,40 @@ namespace BytexDigital.Steam.ContentDelivery
                 (appId, val) => accessTokenRequestResult.AppTokens[appId]);
         }
 
-        internal async Task RequestPackageAccessTokenIfNecessaryAsync(
-            uint packageId,
+        internal async Task<IReadOnlyList<uint>> RequestPackageAccessTokenIfNecessaryAsync(
+            IEnumerable<uint> packageIds,
             CancellationToken cancellationToken = default)
         {
-            if (_packageAccessTokens.ContainsKey(packageId))
+            packageIds = packageIds.ToList();
+            List<uint> grantedPackageIds = new List<uint>();
+            
+            if (packageIds.All(id => _packageAccessTokens.ContainsKey(id)))
             {
-                return;
+                return packageIds.ToList();
             }
 
             var accessTokenRequestResult =
-                await SteamApps.PICSGetAccessTokens(new List<uint>(), new List<uint> { packageId })
+                await SteamApps.PICSGetAccessTokens(new List<uint>(), packageIds)
                     .ToTask()
                     .WaitAsync(cancellationToken);
 
-            if (accessTokenRequestResult.PackageTokensDenied.Contains(packageId))
+            foreach (var packageId in packageIds)
             {
-                throw new SteamAccessDeniedException($"Access denied to package id = {packageId}.");
+                if (accessTokenRequestResult.PackageTokensDenied.Contains(packageId))
+                {
+                    //throw new SteamAccessDeniedException($"Access denied to package id = {packageId}.");
+                    continue;
+                }
+                
+                _packageAccessTokens.AddOrUpdate(
+                    packageId,
+                    accessTokenRequestResult.PackageTokens[packageId],
+                    (packageId, val) => accessTokenRequestResult.PackageTokens[packageId]);
+                
+                grantedPackageIds.Add(packageId);
             }
 
-            _packageAccessTokens.AddOrUpdate(
-                packageId,
-                accessTokenRequestResult.PackageTokens[packageId],
-                (packageId, val) => accessTokenRequestResult.PackageTokens[packageId]);
+            return grantedPackageIds;
         }
 
         internal async Task<SteamKit.SteamApps.PICSProductInfoCallback.PICSProductInfo> GetAppInfoAsync(
@@ -995,27 +1006,22 @@ namespace BytexDigital.Steam.ContentDelivery
                 if (!forceUpdate && _packageProductInfos.TryGetValue(packageId, out var info))
                 {
                     productInfos.Add(info);
-                    continue;
-                }
-
-                try
-                {
-                    // Fetch live
-                    await RequestPackageAccessTokenIfNecessaryAsync(packageId, cancellationToken);
-
-                    packageRequests.Add(
-                        new SteamKit.SteamApps.PICSRequest
-                        {
-                            ID = packageId,
-                            AccessToken = _packageAccessTokens[packageId]
-                        });
-                }
-                catch (SteamAccessDeniedException ex)
-                {
-                    // ignored for now
                 }
             }
+            
+            // Fetch live
+            var grantedIds = await RequestPackageAccessTokenIfNecessaryAsync(packageIds, cancellationToken);
 
+            foreach (var grantedPackageId in grantedIds)
+            {
+                packageRequests.Add(
+                    new SteamKit.SteamApps.PICSRequest
+                    {
+                        ID = grantedPackageId,
+                        AccessToken = _packageAccessTokens[grantedPackageId]
+                    });
+            }  
+            
             var result = await SteamApps.PICSGetProductInfo(new List<SteamKit.SteamApps.PICSRequest>(), packageRequests)
                 .ToTask()
                 .WaitAsync(cancellationToken);
