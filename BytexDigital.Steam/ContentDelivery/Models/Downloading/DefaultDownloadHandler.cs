@@ -151,6 +151,9 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     .OrderBy(x => x.FileName)
                     .ToList();
 
+                // Filter all files that are possible duplicates
+                filteredFiles = filteredFiles.GroupBy(x => x.FileName).Select(x => x.First()).ToList();
+                
                 if (!filteredFiles.Any())
                 {
                     Logger?.LogTrace("No files to download");
@@ -165,9 +168,6 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     
                     return;
                 }
-
-                // Filter all files that are possible duplicates
-                filteredFiles = filteredFiles.GroupBy(x => x.FileName).Select(x => x.First());
 
                 // Verify all files in parallel
                 var verificationTaskFactories =
@@ -215,15 +215,18 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                                     () => DownloadChunkAsync(chunkJob, _cancellationTokenSource.Token))))
                     .ToList();
 
-                var tasksFactoryFailuresLookup = new ConcurrentDictionary<Func<Task>, int>();
-
                 Logger?.LogTrace($"Starting {taskFactoriesQueue.Count} download tasks");
+                
+                if (taskFactoriesQueue.Count > 0)
+                {
+                    var tasksFactoryFailuresLookup = new ConcurrentDictionary<Func<Task>, int>();
 
-                await ParallelAsync(
-                    _steamContentClient.MaxConcurrentDownloadsPerTask,
-                    taskFactoriesQueue,
-                    _cancellationTokenSource.Token);
-
+                    await ParallelAsync(
+                        _steamContentClient.MaxConcurrentDownloadsPerTask,
+                        taskFactoriesQueue,
+                        _cancellationTokenSource.Token);
+                }
+                
                 Logger?.LogTrace("Completed download tasks");
 
                 if (DownloadComplete != null)
