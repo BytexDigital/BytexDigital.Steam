@@ -238,7 +238,7 @@ namespace BytexDigital.Steam.Core
                     {
                         _logonAttemptsCounter++;
                         var accessToken = string.Empty;
-
+                        
                         try
                         {
                             accessToken =
@@ -277,9 +277,23 @@ namespace BytexDigital.Steam.Core
                                 }
                             }
                         }
+                        catch (AuthenticationException ex)
+                        {
+                            SetFaultedAndShutdown(new SteamAuthenticationException(ex.Result));
+
+                            return;
+                        }
                         catch (Exception ex)
                         {
                             OnUnhandledException?.Invoke(this, ex);
+                        }
+                        
+                        // Don't spam unsuccessful logon attempts as this might get us rate limited
+                        if (_logonAttemptsCounter > MaximumLogonAttempts)
+                        {
+                            SetFaultedAndShutdown(new SteamConnectException());
+
+                            return;
                         }
 
                         _steamUserHandler.LogOn(
@@ -402,12 +416,12 @@ namespace BytexDigital.Steam.Core
                 // Don't spam unsuccessful logon attempts as this might get us rate limited
                 if (_logonAttemptsCounter > MaximumLogonAttempts)
                 {
-                    SetFaultedAndShutdown(new SteamLogonException(callback.Result));
+                    SetFaultedAndShutdown(new SteamAuthenticationException(callback.Result));
 
                     return;
                 }
 
-                SetFaultedAndShutdown(new SteamLogonException(callback.Result));
+                SetFaultedAndShutdown(new SteamAuthenticationException(callback.Result));
             }
         }
 
