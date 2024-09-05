@@ -378,7 +378,7 @@ namespace BytexDigital.Steam.ContentDelivery
                     "No depot to download found that matches the criteria.");
             }
 
-            var multipleFilesHandlers = new List<DefaultDownloadHandler>();
+            var multipleFilesHandlers = new List<IDownloadHandler>();
 
             // For each depot, create an individual download handler that will download that depot
             foreach (var depot in depots)

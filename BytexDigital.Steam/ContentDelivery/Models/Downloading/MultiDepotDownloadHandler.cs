@@ -8,12 +8,12 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
     public class MultiDepotDownloadHandler : IDownloadHandler
     {
-        private readonly List<DefaultDownloadHandler> _multipleFilesHandlers;
+        private readonly List<IDownloadHandler> _multipleFilesHandlers;
         private readonly SteamContentClient _steamContentClient;
 
         public MultiDepotDownloadHandler(
             SteamContentClient steamContentClient,
-            List<DefaultDownloadHandler> multipleFilesHandlers)
+            List<IDownloadHandler> multipleFilesHandlers)
         {
             _steamContentClient = steamContentClient;
             _multipleFilesHandlers = multipleFilesHandlers;
