@@ -59,17 +59,53 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public event EventHandler<EventArgs> DownloadComplete;
 
         public bool IsRunning { get; private set; }
-        public int TotalFileCount => _fileTargets.Count;
-        public ulong TotalFileSize => _fileTargets.Select(x => x.Key.TotalSize).Aggregate(0UL, (a, b) => a + b);
+        public bool FilesVerified { get; private set; }
+        
+        public int TotalFileCount
+        {
+            get
+            {
+                if (FilesVerified)
+                {
+                    return _fileTargets.Count;
+                }
+                else
+                {
+                    return Manifest.Files.Count;
+                }
+            }
+        }
 
+        public ulong TotalFileSize
+        {
+            get
+            {
+                if (FilesVerified)
+                {
+                    return _fileTargets.Select(x => x.Key.TotalSize).Aggregate(0UL, (a, b) => a + b);
+                }
+                else
+                {
+                    return Manifest.Files.Select(x => x.TotalSize).Aggregate(0UL, (a, b) => a + b);
+                }
+            }
+        }
+        
         public double TotalProgress
         {
             get
             {
-                var totalBytes = _fileTargets.Sum(x => (long) x.Value.TotalBytes);
-                var currentBytes = _fileTargets.Sum(x => (long) x.Value.WrittenBytes);
+                if (FilesVerified)
+                {
+                    var totalBytes = _fileTargets.Sum(x => (long) x.Value.TotalBytes);
+                    var currentBytes = _fileTargets.Sum(x => (long) x.Value.WrittenBytes);
 
-                return totalBytes > 0 ? (double) currentBytes / totalBytes : 1;
+                    return totalBytes > 0 ? (double) currentBytes / totalBytes : 1;
+                }
+                else
+                {
+                    return 0;
+                }
             }
         }
 
@@ -182,6 +218,8 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
                     verificationTaskFactories,
                     _cancellationTokenSource.Token);
 
+                FilesVerified = true;
+                
                 Logger?.LogTrace("Verification completed");
 
                 if (VerificationCompleted != null)
