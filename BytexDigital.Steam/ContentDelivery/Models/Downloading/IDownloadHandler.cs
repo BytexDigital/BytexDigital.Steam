@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +13,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         string DownloadDirectory { get; }
         Func<ManifestFile, bool> FileCondition { get; }
         DownloadHandlerStateEnum State { get; }
+        IReadOnlyList<ManifestFile> Files { get; }
 
         event EventHandler<FileVerifiedArgs> FileVerified;
         event EventHandler<VerificationCompletedArgs> VerificationCompleted;

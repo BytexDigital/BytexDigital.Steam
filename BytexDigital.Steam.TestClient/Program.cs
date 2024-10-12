@@ -86,6 +86,19 @@ public static class Program
             downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
             await downloadHandler.SetupAsync(@".\download", file => true);
+
+            var duplicates = downloadHandler.Files.GroupBy(x => x.FileName).Where(x => x.Count() > 1).ToList();
+
+            if (downloadHandler is MultiDepotDownloadHandler multiDepotDownloadHandler)
+            {
+                var a = multiDepotDownloadHandler.GetActualHandlers();
+            }
+            
+            foreach (var duplicate in duplicates)
+            {
+                Console.WriteLine($"Duplicate: {duplicate.Key} found {duplicate.Count()} files");
+            }
+            
             await downloadHandler.VerifyAsync();
             await downloadHandler.DownloadAsync();
         }
