@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BytexDigital.Steam.ContentDelivery;
+using BytexDigital.Steam.ContentDelivery.Models.Downloading;
 using BytexDigital.Steam.Core;
 using SteamKit2;
 using SteamClient = BytexDigital.Steam.Core.SteamClient;
@@ -31,12 +33,13 @@ public static class Program
         // steamClient.ForcedServer = ServerRecord.CreateServer(
         //     "cm4-cu-sha1.cm.wmsjsteam.com", 27022,
         //     ProtocolTypes.WebSocket);
-        
+
         Console.WriteLine("Asking Steam for CM servers...");
 
         var servers = steamClient.InternalClient.Configuration.ServerList.GetAllEndPoints();
-        
-        Console.WriteLine($"CM servers found: {string.Join(", ", servers.Select(x => $"{x.GetHost()}:{x.GetPort()}"))}");
+
+        Console.WriteLine(
+            $"CM servers found: {string.Join(", ", servers.Select(x => $"{x.GetHost()}:{x.GetPort()}"))}");
 
         var steamContentClient = new SteamContentClient(steamClient, 25);
 
@@ -58,10 +61,19 @@ public static class Program
 
         Console.WriteLine("Connected");
 
+        var depots = await steamContentClient.GetDepotsAsync(107410, "legacy");
+
+        var handler = await steamContentClient.GetAppDataAsync(107410,
+            "legacy",
+            "Arma3Legacy216",
+            true,
+            x => depots.Any(d => d.Id == x.Id));
+        
         try
         {
-            await using var downloadHandler = await steamContentClient
-                .GetAppDataAsync(233780, 233782);
+            await using var downloadHandler = new MultiDepotDownloadHandler(
+                [handler]
+            );
 
             Console.WriteLine("Starting download");
 
@@ -73,9 +85,9 @@ public static class Program
                 Console.WriteLine($"Verification completed, {args.QueuedFiles.Count} files queued for download");
             downloadHandler.DownloadComplete += (sender, args) => Console.WriteLine("Download completed");
 
-            await downloadHandler.DownloadToFolderAsync(
-                @".\download",
-                file => true);
+            await downloadHandler.SetupAsync(@".\download", file => true);
+            await downloadHandler.VerifyAsync();
+            await downloadHandler.DownloadAsync();
         }
         catch (Exception ex)
         {

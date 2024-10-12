@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using BytexDigital.Steam.ContentDelivery.Exceptions;
 
 namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
 {
@@ -12,14 +13,17 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
     {
         public string FileUrl { get; }
         public string FileName { get; }
+        public string DownloadDirectory { get; protected set; }
+        public Func<ManifestFile, bool> FileCondition { get; protected set; }
+        public DownloadHandlerStateEnum State { get; protected set; }
 
         public LegacyDownloadHandler(string fileUrl, string fileName)
         {
             FileUrl = fileUrl;
             FileName = fileName;
+            State = DownloadHandlerStateEnum.Created;
         }
 
-        public bool IsRunning { get; private set; }
         public double TotalProgress { get; private set; }
         public int TotalFileCount => 1;
         public ulong TotalFileSize { get; private set; }
@@ -28,38 +32,58 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         public event EventHandler<FileVerifiedArgs> FileVerified;
         public event EventHandler<VerificationCompletedArgs> VerificationCompleted;
         public event EventHandler<EventArgs> DownloadComplete;
-
-        public Task DownloadToFolderAsync(
-            string directory,
-            Func<ManifestFile, bool> condition,
-            CancellationToken cancellationToken = default)
+        
+        public Task SetupAsync(string directory, Func<ManifestFile, bool> condition, CancellationToken cancellationToken = default)
         {
-            return DownloadToFolderAsync(directory, cancellationToken);
+            if (State != DownloadHandlerStateEnum.Created)
+            {
+                throw new DownloadHandlerStateMismatchException(DownloadHandlerStateEnum.Created, State);
+            }
+            
+            DownloadDirectory = directory;
+            FileCondition = condition;
+
+            State = DownloadHandlerStateEnum.Verified;
+
+            return Task.CompletedTask;
         }
 
-        public async Task DownloadToFolderAsync(string directory, CancellationToken cancellationToken = default)
+        public Task VerifyAsync(CancellationToken cancellationToken = default)
         {
-            if (IsRunning)
+            return Task.CompletedTask;
+        }
+
+        public async Task DownloadAsync(CancellationToken cancellationToken = default)
+        {
+            try
             {
-                throw new InvalidOperationException("Download task was already started.");
+                if (State != DownloadHandlerStateEnum.Verified)
+                {
+                    throw new DownloadHandlerStateMismatchException(DownloadHandlerStateEnum.Verified, State);
+                }
+
+                State = DownloadHandlerStateEnum.Downloading;
+
+                var webClient = new WebClient();
+
+                Directory.CreateDirectory(DownloadDirectory);
+
+                webClient.DownloadProgressChanged += WebClient_DownloadProgressChanged;
+                webClient.DownloadFileCompleted += WebClient_DownloadFileCompleted;
+
+                await webClient.DownloadFileTaskAsync(new Uri(FileUrl), Path.Combine(DownloadDirectory, FileName));
+
+                State = DownloadHandlerStateEnum.Downloaded;
+
+                if (DownloadComplete != null)
+                {
+                    _ = Task.Run(() => DownloadComplete.Invoke(this, new EventArgs()));
+                }
             }
-
-            IsRunning = true;
-
-            var webClient = new WebClient();
-
-            Directory.CreateDirectory(directory);
-
-            webClient.DownloadProgressChanged += WebClient_DownloadProgressChanged;
-            webClient.DownloadFileCompleted += WebClient_DownloadFileCompleted;
-
-            await webClient.DownloadFileTaskAsync(new Uri(FileUrl), Path.Combine(directory, FileName));
-
-            IsRunning = false;
-
-            if (DownloadComplete != null)
+            catch
             {
-                _ = Task.Run(() => DownloadComplete.Invoke(this, new EventArgs()));
+                // In this handler, it's not a total failure if an exception is raised here, so the handler can be reused.
+                State = DownloadHandlerStateEnum.SetUp;
             }
         }
 
@@ -76,7 +100,7 @@ namespace BytexDigital.Steam.ContentDelivery.Models.Downloading
         private void WebClient_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             TotalProgress = 1;
-            IsRunning = false;
+            State = DownloadHandlerStateEnum.Downloaded;
 
             if (FileDownloaded != null)
             {

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
 
         <VersionSuffix>$(VersionSuffix)</VersionSuffix>
         <Version>0.8.2</Version>
@@ -21,7 +21,7 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="5.0.0" />
         <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
         <PackageReference Include="Nito.AsyncEx" Version="5.0.0" />
-        <PackageReference Include="SteamKit2" Version="2.5.0-Beta.1" />
+        <PackageReference Include="SteamKit2" Version="3.0.0-Beta.3" />
     </ItemGroup>
 
     <ItemGroup>

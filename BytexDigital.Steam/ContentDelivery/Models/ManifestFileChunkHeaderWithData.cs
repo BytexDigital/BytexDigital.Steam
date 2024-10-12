@@ -6,7 +6,7 @@
 
         public ManifestFileChunkHeaderWithData(
             byte[] id,
-            byte[] checksum,
+            uint checksum,
             ulong offset,
             uint compressedLength,
             uint uncompressedLength,
