@@ -3,12 +3,12 @@
     public class ManifestFileChunkHeader
     {
         public byte[] Id { get; }
-        public byte[] Checksum { get; }
+        public uint Checksum { get; }
         public ulong Offset { get; }
         public uint CompressedLength { get; }
         public uint UncompressedLength { get; }
 
-        public ManifestFileChunkHeader(byte[] id, byte[] checksum, ulong offset, uint compressedLength,
+        public ManifestFileChunkHeader(byte[] id, uint checksum, ulong offset, uint compressedLength,
             uint uncompressedLength)
         {
             Id = id;
