@@ -60,6 +60,8 @@ namespace BytexDigital.Steam.Core.Regional
 
                 serverRecords.Add(ServerRecord.CreateWebSocketServer(child.Value));
             }
+            
+            LastServerListRefresh = DateTime.UtcNow;
 
             return serverRecords.AsReadOnly();
         }
@@ -68,6 +70,8 @@ namespace BytexDigital.Steam.Core.Regional
         {
             return Task.CompletedTask;
         }
+
+        public DateTime LastServerListRefresh { get; protected set; } = DateTime.MinValue;
 
         public void SetSteamConfiguration(SteamConfiguration steamConfiguration)
         {

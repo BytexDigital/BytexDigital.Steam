@@ -61,13 +61,17 @@ public static class Program
 
         Console.WriteLine("Connected");
 
-        var depots = await steamContentClient.GetDepotsAsync(107410, "legacy");
+        // var depots = await steamContentClient.GetDepotsAsync(107410, "legacy");
+        //
+        // var test = await steamContentClient.GetPublishedFilesForAppIdRawAsync(107410);
+        //
+        // var handler = await steamContentClient.GetAppDataAsync(107410,
+        //     "legacy",
+        //     "Arma3Legacy216",
+        //     true,
+        //     x => depots.Any(d => d.Id == x.Id));
 
-        var handler = await steamContentClient.GetAppDataAsync(107410,
-            "legacy",
-            "Arma3Legacy216",
-            true,
-            x => depots.Any(d => d.Id == x.Id));
+        var handler = await steamContentClient.GetPublishedFileDataAsync(3417789720);
         
         try
         {

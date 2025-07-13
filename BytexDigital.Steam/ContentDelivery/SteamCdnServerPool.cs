@@ -154,7 +154,7 @@ namespace BytexDigital.Steam.ContentDelivery
                 {
                     var cdnServers = await ContentServerDirectoryService.LoadAsync(
                         _steamContentClient.SteamClient.InternalClient.Configuration,
-                        (int) _steamContentClient.SteamClient.ActiveCellId,
+                        _steamContentClient.SteamClient.ActiveCellId,
                         _cancellationTokenSource.Token);
 
                     if (cdnServers == null)
